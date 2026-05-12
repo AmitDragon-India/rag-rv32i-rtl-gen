@@ -1,0 +1,1215 @@
+TASK LABEL:
+top_claude_haiku_v1_attempt3_failed
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I 5-stage pipelined processor.
+
+Module name: rv32i_top
+
+Parameters:
+parameter int    MEM_DEPTH = 4096
+parameter string MEM_FILE  = ""
+
+Interface:
+input  logic clk
+input  logic rst_n
+
+Internal structure:
+- Instantiate all 9 submodules
+- Implement 4 pipeline registers as always_ff blocks
+- Implement data memory as logic array inside this module
+- Implement pc_next mux
+- wb_data from WB stage feeds back to EX stage
+
+============================================================
+STEP 1 — DECLARE ALL INTERNAL WIRES
+============================================================
+
+Declare these wires before any instantiation:
+
+// IF stage outputs
+logic [31:0] if_instr, if_pc_out, if_pc_plus4;
+
+// IF/ID pipeline register
+logic [31:0] if_id_instr, if_id_pc, if_id_pc_plus4;
+
+// alu_control output
+logic [3:0]  alu_op_wire;
+
+// regfile outputs
+logic [31:0] rs1_data, rs2_data;
+
+// ID stage outputs
+logic [6:0]  id_opcode;
+logic [2:0]  id_funct3;
+logic [6:0]  id_funct7;
+logic [4:0]  id_rs1, id_rs2, id_rd;
+logic [31:0] id_imm;
+logic [31:0] id_pc_out, id_pc_plus4_out;
+logic [31:0] id_rs1_data_out, id_rs2_data_out;
+logic [31:0] id_store_data;
+logic        id_reg_write, id_mem_read, id_mem_write;
+logic        id_branch, id_jump, id_alu_srcA;
+logic [1:0]  id_alu_srcB, id_wb_sel;
+logic [3:0]  id_alu_op_out;
+
+// ID/EX pipeline register
+logic        id_ex_reg_write, id_ex_mem_read, id_ex_mem_write;
+logic        id_ex_branch, id_ex_jump, id_ex_alu_srcA;
+logic [1:0]  id_ex_alu_srcB, id_ex_wb_sel;
+logic [3:0]  id_ex_alu_op;
+logic [31:0] id_ex_rs1_data, id_ex_rs2_data, id_ex_store_data;
+logic [31:0] id_ex_imm, id_ex_pc, id_ex_pc_plus4;
+logic [4:0]  id_ex_rd, id_ex_rs1, id_ex_rs2;
+logic [2:0]  id_ex_funct3;
+logic [6:0]  id_ex_opcode;
+
+// forwarding unit outputs
+logic [1:0]  forward_a, forward_b, forward_s;
+
+// EX stage outputs
+logic [31:0] ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out;
+logic        ex_branch_taken, ex_redirect_en;
+logic [31:0] ex_redirect_pc;
+logic        ex_reg_write_out, ex_mem_read_out, ex_mem_write_out;
+logic [4:0]  ex_rd_out;
+logic [1:0]  ex_wb_sel_out;
+
+// hazard unit outputs
+logic        stall_pc, stall_if_id, flush_if_id, flush_id_ex;
+
+// pc_next wire
+logic [31:0] pc_next;
+
+// EX/MEM pipeline register
+logic        ex_mem_reg_write, ex_mem_mem_read, ex_mem_mem_write;
+logic [1:0]  ex_mem_wb_sel;
+logic [31:0] ex_mem_alu_result, ex_mem_store_data;
+logic [4:0]  ex_mem_rd;
+logic [2:0]  ex_mem_funct3;
+logic [31:0] ex_mem_pc_plus4, ex_mem_imm_u;
+
+// data memory wires
+logic [31:0] dmem_addr, dmem_wdata, dmem_rdata;
+logic [3:0]  dmem_byte_en;
+logic        dmem_we, dmem_re;
+
+// MEM stage outputs
+logic [31:0] mem_pc_plus4_out, mem_imm_u_out;
+logic [31:0] mem_rdata_out, mem_alu_result_out;
+logic        mem_reg_write_out;
+logic [4:0]  mem_rd_out;
+logic [1:0]  mem_wb_sel_out;
+
+// MEM/WB pipeline register
+logic        mem_wb_reg_write;
+logic [1:0]  mem_wb_wb_sel;
+logic [31:0] mem_wb_alu_result, mem_wb_mem_rdata;
+logic [4:0]  mem_wb_rd;
+logic [31:0] mem_wb_pc_plus4, mem_wb_imm_u;
+
+// WB stage output
+logic [31:0] wb_data;
+
+============================================================
+STEP 2 — INSTANTIATE SUBMODULES
+============================================================
+
+// IF stage
+rv32i_if_stage #(.MEM_DEPTH(MEM_DEPTH), .MEM_FILE(MEM_FILE)) if_stage (
+    .clk(clk), .rst_n(rst_n),
+    .stall(stall_pc), .flush(flush_if_id),
+    .pc_next(pc_next),
+    .instr(if_instr), .pc_out(if_pc_out), .pc_plus4(if_pc_plus4)
+);
+
+// ALU control — reads directly from IF/ID register
+rv32i_alu_control alu_ctrl (
+    .opcode(if_id_instr[6:0]),
+    .funct3(if_id_instr[14:12]),
+    .funct7(if_id_instr[31:25]),
+    .alu_op(alu_op_wire)
+);
+
+// Register file — read in ID stage, write in WB stage
+rv32i_regfile regfile (
+    .clk(clk), .rst_n(rst_n),
+    .rs1_addr(if_id_instr[19:15]),
+    .rs2_addr(if_id_instr[24:20]),
+    .rs1_data(rs1_data), .rs2_data(rs2_data),
+    .rd_addr(mem_wb_rd),
+    .rd_data(wb_data),
+    .reg_write(mem_wb_reg_write)
+);
+
+// ID stage
+rv32i_id_stage id_stage (
+    .instr(if_id_instr),
+    .pc_in(if_id_pc),
+    .pc_plus4_in(if_id_pc_plus4),
+    .rs1_data_in(rs1_data),
+    .rs2_data_in(rs2_data),
+    .alu_op_in(alu_op_wire),
+    .opcode(id_opcode), .funct3(id_funct3), .funct7(id_funct7),
+    .rs1(id_rs1), .rs2(id_rs2), .rd(id_rd),
+    .imm(id_imm),
+    .pc_out(id_pc_out), .pc_plus4_out(id_pc_plus4_out),
+    .rs1_data_out(id_rs1_data_out), .rs2_data_out(id_rs2_data_out),
+    .store_data(id_store_data),
+    .reg_write(id_reg_write), .mem_read(id_mem_read), .mem_write(id_mem_write),
+    .branch(id_branch), .jump(id_jump),
+    .alu_srcA(id_alu_srcA), .alu_srcB(id_alu_srcB),
+    .wb_sel(id_wb_sel), .alu_op_out(id_alu_op_out)
+);
+
+// Forwarding unit
+rv32i_forward_unit fwd_unit (
+    .id_ex_rs1(id_ex_rs1), .id_ex_rs2(id_ex_rs2),
+    .id_ex_alu_srcB(id_ex_alu_srcB),
+    .ex_mem_reg_write(ex_mem_reg_write), .ex_mem_rd(ex_mem_rd),
+    .mem_wb_reg_write(mem_wb_reg_write), .mem_wb_rd(mem_wb_rd),
+    .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s)
+);
+
+// EX stage
+rv32i_ex_stage ex_stage (
+    .rs1_data(id_ex_rs1_data), .rs2_data(id_ex_rs2_data),
+    .store_data(id_ex_store_data),
+    .imm(id_ex_imm), .pc_in(id_ex_pc), .pc_plus4_in(id_ex_pc_plus4),
+    .alu_srcA(id_ex_alu_srcA), .alu_srcB(id_ex_alu_srcB),
+    .alu_op(id_ex_alu_op), .funct3(id_ex_funct3),
+    .branch(id_ex_branch), .jump(id_ex_jump), .opcode(id_ex_opcode),
+    .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s),
+    .ex_mem_alu_result(ex_mem_alu_result),
+    .wb_data(wb_data),
+    .mem_read(id_ex_mem_read), .mem_write(id_ex_mem_write),
+    .wb_sel(id_ex_wb_sel),
+    .reg_write(id_ex_reg_write), .rd(id_ex_rd),
+    .alu_result(ex_alu_result), .store_data_fwd(ex_store_data_fwd),
+    .pc_plus4_out(ex_pc_plus4_out),
+    .branch_taken(ex_branch_taken), .redirect_en(ex_redirect_en),
+    .redirect_pc(ex_redirect_pc),
+    .reg_write_out(ex_reg_write_out), .rd_out(ex_rd_out),
+    .wb_sel_out(ex_wb_sel_out),
+    .mem_read_out(ex_mem_read_out), .mem_write_out(ex_mem_write_out)
+);
+
+// Hazard unit
+rv32i_hazard_unit hazard_unit (
+    .if_id_instr(if_id_instr),
+    .id_ex_rd(id_ex_rd), .id_ex_mem_read(id_ex_mem_read),
+    .redirect_en(ex_redirect_en),
+    .stall_pc(stall_pc), .stall_if_id(stall_if_id),
+    .flush_if_id(flush_if_id), .flush_id_ex(flush_id_ex)
+);
+
+// MEM stage
+rv32i_mem_stage mem_stage (
+    .alu_result(ex_mem_alu_result),
+    .store_data(ex_mem_store_data),
+    .pc_plus4_in(ex_mem_pc_plus4),
+    .imm_u_in(ex_mem_imm_u),
+    .mem_read(ex_mem_mem_read), .mem_write(ex_mem_mem_write),
+    .funct3(ex_mem_funct3), .wb_sel(ex_mem_wb_sel),
+    .reg_write(ex_mem_reg_write), .rd_in(ex_mem_rd),
+    .dmem_addr(dmem_addr), .dmem_wdata(dmem_wdata),
+    .dmem_byte_en(dmem_byte_en), .dmem_we(dmem_we), .dmem_re(dmem_re),
+    .dmem_rdata(dmem_rdata),
+    .pc_plus4_out(mem_pc_plus4_out), .imm_u_out(mem_imm_u_out),
+    .mem_rdata_out(mem_rdata_out), .alu_result_out(mem_alu_result_out),
+    .reg_write_out(mem_reg_write_out), .rd_out(mem_rd_out),
+    .wb_sel_out(mem_wb_sel_out)
+);
+
+// WB stage
+rv32i_wb_stage wb_stage (
+    .alu_result(mem_wb_alu_result),
+    .mem_rdata(mem_wb_mem_rdata),
+    .pc_plus4_in(mem_wb_pc_plus4),
+    .imm_u_in(mem_wb_imm_u),
+    .wb_sel(mem_wb_wb_sel),
+    .wb_data(wb_data)
+);
+
+============================================================
+STEP 3 — DATA MEMORY
+============================================================
+
+logic [31:0] dmem [0:MEM_DEPTH-1];
+
+always_ff @(posedge clk) begin
+    if (dmem_we) begin
+        if (dmem_byte_en[0]) dmem[dmem_addr[31:2]][7:0]   <= dmem_wdata[7:0];
+        if (dmem_byte_en[1]) dmem[dmem_addr[31:2]][15:8]  <= dmem_wdata[15:8];
+        if (dmem_byte_en[2]) dmem[dmem_addr[31:2]][23:16] <= dmem_wdata[23:16];
+        if (dmem_byte_en[3]) dmem[dmem_addr[31:2]][31:24] <= dmem_wdata[31:24];
+    end
+end
+
+assign dmem_rdata = dmem[dmem_addr[31:2]];
+
+============================================================
+STEP 4 — PC NEXT MUX
+============================================================
+
+always_comb begin
+    if (ex_redirect_en)
+        pc_next = ex_redirect_pc;
+    else
+        pc_next = if_pc_plus4;
+end
+
+============================================================
+STEP 5 — IF/ID PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_if_id) begin
+        if_id_instr    <= 32'h00000013;
+        if_id_pc       <= 32'b0;
+        if_id_pc_plus4 <= 32'b0;
+    end else if (!stall_if_id) begin
+        if_id_instr    <= if_instr;
+        if_id_pc       <= if_pc_out;
+        if_id_pc_plus4 <= if_pc_plus4;
+    end
+end
+
+============================================================
+STEP 6 — ID/EX PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_id_ex) begin
+        id_ex_reg_write  <= 1'b0;  id_ex_mem_read   <= 1'b0;
+        id_ex_mem_write  <= 1'b0;  id_ex_branch     <= 1'b0;
+        id_ex_jump       <= 1'b0;  id_ex_alu_srcA   <= 1'b0;
+        id_ex_alu_srcB   <= 2'b0;  id_ex_wb_sel     <= 2'b0;
+        id_ex_alu_op     <= 4'b0;  id_ex_rs1_data   <= 32'b0;
+        id_ex_rs2_data   <= 32'b0; id_ex_store_data <= 32'b0;
+        id_ex_imm        <= 32'b0; id_ex_pc         <= 32'b0;
+        id_ex_pc_plus4   <= 32'b0; id_ex_rd         <= 5'b0;
+        id_ex_rs1        <= 5'b0;  id_ex_rs2        <= 5'b0;
+        id_ex_funct3     <= 3'b0;  id_ex_opcode     <= 7'b0;
+    end else begin
+        id_ex_reg_write  <= id_reg_write;
+        id_ex_mem_read   <= id_mem_read;
+        id_ex_mem_write  <= id_mem_write;
+        id_ex_branch     <= id_branch;
+        id_ex_jump       <= id_jump;
+        id_ex_alu_srcA   <= id_alu_srcA;
+        id_ex_alu_srcB   <= id_alu_srcB;
+        id_ex_wb_sel     <= id_wb_sel;
+        id_ex_alu_op     <= id_alu_op_out;
+        id_ex_rs1_data   <= id_rs1_data_out;
+        id_ex_rs2_data   <= id_rs2_data_out;
+        id_ex_store_data <= id_store_data;
+        id_ex_imm        <= id_imm;
+        id_ex_pc         <= id_pc_out;
+        id_ex_pc_plus4   <= id_pc_plus4_out;
+        id_ex_rd         <= id_rd;
+        id_ex_rs1        <= id_rs1;
+        id_ex_rs2        <= id_rs2;
+        id_ex_funct3     <= id_funct3;
+        id_ex_opcode     <= id_opcode;
+    end
+end
+
+============================================================
+STEP 7 — EX/MEM PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_id_ex) begin
+        ex_mem_reg_write  <= 1'b0;  ex_mem_mem_read   <= 1'b0;
+        ex_mem_mem_write  <= 1'b0;  ex_mem_wb_sel     <= 2'b0;
+        ex_mem_alu_result <= 32'b0; ex_mem_store_data <= 32'b0;
+        ex_mem_rd         <= 5'b0;  ex_mem_funct3     <= 3'b0;
+        ex_mem_pc_plus4   <= 32'b0; ex_mem_imm_u      <= 32'b0;
+    end else begin
+        ex_mem_reg_write  <= ex_reg_write_out;
+        ex_mem_mem_read   <= ex_mem_read_out;
+        ex_mem_mem_write  <= ex_mem_write_out;
+        ex_mem_wb_sel     <= ex_wb_sel_out;
+        ex_mem_alu_result <= ex_alu_result;
+        ex_mem_store_data <= ex_store_data_fwd;
+        ex_mem_rd         <= ex_rd_out;
+        ex_mem_funct3     <= id_ex_funct3;
+        ex_mem_pc_plus4   <= ex_pc_plus4_out;
+        ex_mem_imm_u      <= id_ex_imm;
+    end
+end
+
+============================================================
+STEP 8 — MEM/WB PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        mem_wb_reg_write  <= 1'b0;  mem_wb_wb_sel     <= 2'b0;
+        mem_wb_alu_result <= 32'b0; mem_wb_mem_rdata  <= 32'b0;
+        mem_wb_rd         <= 5'b0;  mem_wb_pc_plus4   <= 32'b0;
+        mem_wb_imm_u      <= 32'b0;
+    end else begin
+        mem_wb_reg_write  <= mem_reg_write_out;
+        mem_wb_wb_sel     <= mem_wb_sel_out;
+        mem_wb_alu_result <= mem_alu_result_out;
+        mem_wb_mem_rdata  <= mem_rdata_out;
+        mem_wb_rd         <= mem_rd_out;
+        mem_wb_pc_plus4   <= mem_pc_plus4_out;
+        mem_wb_imm_u      <= mem_imm_u_out;
+    end
+end
+
+Coding constraints:
+- Declare ALL internal wires at top before any instantiation
+- Use exact wire and port names as specified above
+- Do NOT instantiate rv32i_alu — it is inside rv32i_ex_stage
+- Do NOT add any external ports — rv32i_top has only clk and rst_n
+- wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+- ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I 5-stage pipelined processor.
+
+Module name: rv32i_top
+
+Parameters:
+parameter int    MEM_DEPTH = 4096
+parameter string MEM_FILE  = ""
+
+Interface:
+input  logic clk
+input  logic rst_n
+
+Internal structure:
+- Instantiate all 9 submodules
+- Implement 4 pipeline registers as always_ff blocks
+- Implement data memory as logic array inside this module
+- Implement pc_next mux
+- wb_data from WB stage feeds back to EX stage
+
+============================================================
+STEP 1 — DECLARE ALL INTERNAL WIRES
+============================================================
+
+Declare these wires before any instantiation:
+
+// IF stage outputs
+logic [31:0] if_instr, if_pc_out, if_pc_plus4;
+
+// IF/ID pipeline register
+logic [31:0] if_id_instr, if_id_pc, if_id_pc_plus4;
+
+// alu_control output
+logic [3:0]  alu_op_wire;
+
+// regfile outputs
+logic [31:0] rs1_data, rs2_data;
+
+// ID stage outputs
+logic [6:0]  id_opcode;
+logic [2:0]  id_funct3;
+logic [6:0]  id_funct7;
+logic [4:0]  id_rs1, id_rs2, id_rd;
+logic [31:0] id_imm;
+logic [31:0] id_pc_out, id_pc_plus4_out;
+logic [31:0] id_rs1_data_out, id_rs2_data_out;
+logic [31:0] id_store_data;
+logic        id_reg_write, id_mem_read, id_mem_write;
+logic        id_branch, id_jump, id_alu_srcA;
+logic [1:0]  id_alu_srcB, id_wb_sel;
+logic [3:0]  id_alu_op_out;
+
+// ID/EX pipeline register
+logic        id_ex_reg_write, id_ex_mem_read, id_ex_mem_write;
+logic        id_ex_branch, id_ex_jump, id_ex_alu_srcA;
+logic [1:0]  id_ex_alu_srcB, id_ex_wb_sel;
+logic [3:0]  id_ex_alu_op;
+logic [31:0] id_ex_rs1_data, id_ex_rs2_data, id_ex_store_data;
+logic [31:0] id_ex_imm, id_ex_pc, id_ex_pc_plus4;
+logic [4:0]  id_ex_rd, id_ex_rs1, id_ex_rs2;
+logic [2:0]  id_ex_funct3;
+logic [6:0]  id_ex_opcode;
+
+// forwarding unit outputs
+logic [1:0]  forward_a, forward_b, forward_s;
+
+// EX stage outputs
+logic [31:0] ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out;
+logic        ex_branch_taken, ex_redirect_en;
+logic [31:0] ex_redirect_pc;
+logic        ex_reg_write_out, ex_mem_read_out, ex_mem_write_out;
+logic [4:0]  ex_rd_out;
+logic [1:0]  ex_wb_sel_out;
+
+// hazard unit outputs
+logic        stall_pc, stall_if_id, flush_if_id, flush_id_ex;
+
+// pc_next wire
+logic [31:0] pc_next;
+
+// EX/MEM pipeline register
+logic        ex_mem_reg_write, ex_mem_mem_read, ex_mem_mem_write;
+logic [1:0]  ex_mem_wb_sel;
+logic [31:0] ex_mem_alu_result, ex_mem_store_data;
+logic [4:0]  ex_mem_rd;
+logic [2:0]  ex_mem_funct3;
+logic [31:0] ex_mem_pc_plus4, ex_mem_imm_u;
+
+// data memory wires
+logic [31:0] dmem_addr, dmem_wdata, dmem_rdata;
+logic [3:0]  dmem_byte_en;
+logic        dmem_we, dmem_re;
+
+// MEM stage outputs
+logic [31:0] mem_pc_plus4_out, mem_imm_u_out;
+logic [31:0] mem_rdata_out, mem_alu_result_out;
+logic        mem_reg_write_out;
+logic [4:0]  mem_rd_out;
+logic [1:0]  mem_wb_sel_out;
+
+// MEM/WB pipeline register
+logic        mem_wb_reg_write;
+logic [1:0]  mem_wb_wb_sel;
+logic [31:0] mem_wb_alu_result, mem_wb_mem_rdata;
+logic [4:0]  mem_wb_rd;
+logic [31:0] mem_wb_pc_plus4, mem_wb_imm_u;
+
+// WB stage output
+logic [31:0] wb_data;
+
+============================================================
+STEP 2 — INSTANTIATE SUBMODULES
+============================================================
+
+// IF stage
+rv32i_if_stage #(.MEM_DEPTH(MEM_DEPTH), .MEM_FILE(MEM_FILE)) if_stage (
+    .clk(clk), .rst_n(rst_n),
+    .stall(stall_pc), .flush(flush_if_id),
+    .pc_next(pc_next),
+    .instr(if_instr), .pc_out(if_pc_out), .pc_plus4(if_pc_plus4)
+);
+
+// ALU control — reads directly from IF/ID register
+rv32i_alu_control alu_ctrl (
+    .opcode(if_id_instr[6:0]),
+    .funct3(if_id_instr[14:12]),
+    .funct7(if_id_instr[31:25]),
+    .alu_op(alu_op_wire)
+);
+
+// Register file — read in ID stage, write in WB stage
+rv32i_regfile regfile (
+    .clk(clk), .rst_n(rst_n),
+    .rs1_addr(if_id_instr[19:15]),
+    .rs2_addr(if_id_instr[24:20]),
+    .rs1_data(rs1_data), .rs2_data(rs2_data),
+    .rd_addr(mem_wb_rd),
+    .rd_data(wb_data),
+    .reg_write(mem_wb_reg_write)
+);
+
+// ID stage
+rv32i_id_stage id_stage (
+    .instr(if_id_instr),
+    .pc_in(if_id_pc),
+    .pc_plus4_in(if_id_pc_plus4),
+    .rs1_data_in(rs1_data),
+    .rs2_data_in(rs2_data),
+    .alu_op_in(alu_op_wire),
+    .opcode(id_opcode), .funct3(id_funct3), .funct7(id_funct7),
+    .rs1(id_rs1), .rs2(id_rs2), .rd(id_rd),
+    .imm(id_imm),
+    .pc_out(id_pc_out), .pc_plus4_out(id_pc_plus4_out),
+    .rs1_data_out(id_rs1_data_out), .rs2_data_out(id_rs2_data_out),
+    .store_data(id_store_data),
+    .reg_write(id_reg_write), .mem_read(id_mem_read), .mem_write(id_mem_write),
+    .branch(id_branch), .jump(id_jump),
+    .alu_srcA(id_alu_srcA), .alu_srcB(id_alu_srcB),
+    .wb_sel(id_wb_sel), .alu_op_out(id_alu_op_out)
+);
+
+// Forwarding unit
+rv32i_forward_unit fwd_unit (
+    .id_ex_rs1(id_ex_rs1), .id_ex_rs2(id_ex_rs2),
+    .id_ex_alu_srcB(id_ex_alu_srcB),
+    .ex_mem_reg_write(ex_mem_reg_write), .ex_mem_rd(ex_mem_rd),
+    .mem_wb_reg_write(mem_wb_reg_write), .mem_wb_rd(mem_wb_rd),
+    .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s)
+);
+
+// EX stage
+rv32i_ex_stage ex_stage (
+    .rs1_data(id_ex_rs1_data), .rs2_data(id_ex_rs2_data),
+    .store_data(id_ex_store_data),
+    .imm(id_ex_imm), .pc_in(id_ex_pc), .pc_plus4_in(id_ex_pc_plus4),
+    .alu_srcA(id_ex_alu_srcA), .alu_srcB(id_ex_alu_srcB),
+    .alu_op(id_ex_alu_op), .funct3(id_ex_funct3),
+    .branch(id_ex_branch), .jump(id_ex_jump), .opcode(id_ex_opcode),
+    .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s),
+    .ex_mem_alu_result(ex_mem_alu_result),
+    .wb_data(wb_data),
+    .mem_read(id_ex_mem_read), .mem_write(id_ex_mem_write),
+    .wb_sel(id_ex_wb_sel),
+    .reg_write(id_ex_reg_write), .rd(id_ex_rd),
+    .alu_result(ex_alu_result), .store_data_fwd(ex_store_data_fwd),
+    .pc_plus4_out(ex_pc_plus4_out),
+    .branch_taken(ex_branch_taken), .redirect_en(ex_redirect_en),
+    .redirect_pc(ex_redirect_pc),
+    .reg_write_out(ex_reg_write_out), .rd_out(ex_rd_out),
+    .wb_sel_out(ex_wb_sel_out),
+    .mem_read_out(ex_mem_read_out), .mem_write_out(ex_mem_write_out)
+);
+
+// Hazard unit
+rv32i_hazard_unit hazard_unit (
+    .if_id_instr(if_id_instr),
+    .id_ex_rd(id_ex_rd), .id_ex_mem_read(id_ex_mem_read),
+    .redirect_en(ex_redirect_en),
+    .stall_pc(stall_pc), .stall_if_id(stall_if_id),
+    .flush_if_id(flush_if_id), .flush_id_ex(flush_id_ex)
+);
+
+// MEM stage
+rv32i_mem_stage mem_stage (
+    .alu_result(ex_mem_alu_result),
+    .store_data(ex_mem_store_data),
+    .pc_plus4_in(ex_mem_pc_plus4),
+    .imm_u_in(ex_mem_imm_u),
+    .mem_read(ex_mem_mem_read), .mem_write(ex_mem_mem_write),
+    .funct3(ex_mem_funct3), .wb_sel(ex_mem_wb_sel),
+    .reg_write(ex_mem_reg_write), .rd_in(ex_mem_rd),
+    .dmem_addr(dmem_addr), .dmem_wdata(dmem_wdata),
+    .dmem_byte_en(dmem_byte_en), .dmem_we(dmem_we), .dmem_re(dmem_re),
+    .dmem_rdata(dmem_rdata),
+    .pc_plus4_out(mem_pc_plus4_out), .imm_u_out(mem_imm_u_out),
+    .mem_rdata_out(mem_rdata_out), .alu_result_out(mem_alu_result_out),
+    .reg_write_out(mem_reg_write_out), .rd_out(mem_rd_out),
+    .wb_sel_out(mem_wb_sel_out)
+);
+
+// WB stage
+rv32i_wb_stage wb_stage (
+    .alu_result(mem_wb_alu_result),
+    .mem_rdata(mem_wb_mem_rdata),
+    .pc_plus4_in(mem_wb_pc_plus4),
+    .imm_u_in(mem_wb_imm_u),
+    .wb_sel(mem_wb_wb_sel),
+    .wb_data(wb_data)
+);
+
+============================================================
+STEP 3 — DATA MEMORY
+============================================================
+
+logic [31:0] dmem [0:MEM_DEPTH-1];
+
+always_ff @(posedge clk) begin
+    if (dmem_we) begin
+        if (dmem_byte_en[0]) dmem[dmem_addr[31:2]][7:0]   <= dmem_wdata[7:0];
+        if (dmem_byte_en[1]) dmem[dmem_addr[31:2]][15:8]  <= dmem_wdata[15:8];
+        if (dmem_byte_en[2]) dmem[dmem_addr[31:2]][23:16] <= dmem_wdata[23:16];
+        if (dmem_byte_en[3]) dmem[dmem_addr[31:2]][31:24] <= dmem_wdata[31:24];
+    end
+end
+
+assign dmem_rdata = dmem[dmem_addr[31:2]];
+
+============================================================
+STEP 4 — PC NEXT MUX
+============================================================
+
+always_comb begin
+    if (ex_redirect_en)
+        pc_next = ex_redirect_pc;
+    else
+        pc_next = if_pc_plus4;
+end
+
+============================================================
+STEP 5 — IF/ID PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_if_id) begin
+        if_id_instr    <= 32'h00000013;
+        if_id_pc       <= 32'b0;
+        if_id_pc_plus4 <= 32'b0;
+    end else if (!stall_if_id) begin
+        if_id_instr    <= if_instr;
+        if_id_pc       <= if_pc_out;
+        if_id_pc_plus4 <= if_pc_plus4;
+    end
+end
+
+============================================================
+STEP 6 — ID/EX PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_id_ex) begin
+        id_ex_reg_write  <= 1'b0;  id_ex_mem_read   <= 1'b0;
+        id_ex_mem_write  <= 1'b0;  id_ex_branch     <= 1'b0;
+        id_ex_jump       <= 1'b0;  id_ex_alu_srcA   <= 1'b0;
+        id_ex_alu_srcB   <= 2'b0;  id_ex_wb_sel     <= 2'b0;
+        id_ex_alu_op     <= 4'b0;  id_ex_rs1_data   <= 32'b0;
+        id_ex_rs2_data   <= 32'b0; id_ex_store_data <= 32'b0;
+        id_ex_imm        <= 32'b0; id_ex_pc         <= 32'b0;
+        id_ex_pc_plus4   <= 32'b0; id_ex_rd         <= 5'b0;
+        id_ex_rs1        <= 5'b0;  id_ex_rs2        <= 5'b0;
+        id_ex_funct3     <= 3'b0;  id_ex_opcode     <= 7'b0;
+    end else begin
+        id_ex_reg_write  <= id_reg_write;
+        id_ex_mem_read   <= id_mem_read;
+        id_ex_mem_write  <= id_mem_write;
+        id_ex_branch     <= id_branch;
+        id_ex_jump       <= id_jump;
+        id_ex_alu_srcA   <= id_alu_srcA;
+        id_ex_alu_srcB   <= id_alu_srcB;
+        id_ex_wb_sel     <= id_wb_sel;
+        id_ex_alu_op     <= id_alu_op_out;
+        id_ex_rs1_data   <= id_rs1_data_out;
+        id_ex_rs2_data   <= id_rs2_data_out;
+        id_ex_store_data <= id_store_data;
+        id_ex_imm        <= id_imm;
+        id_ex_pc         <= id_pc_out;
+        id_ex_pc_plus4   <= id_pc_plus4_out;
+        id_ex_rd         <= id_rd;
+        id_ex_rs1        <= id_rs1;
+        id_ex_rs2        <= id_rs2;
+        id_ex_funct3     <= id_funct3;
+        id_ex_opcode     <= id_opcode;
+    end
+end
+
+============================================================
+STEP 7 — EX/MEM PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_id_ex) begin
+        ex_mem_reg_write  <= 1'b0;  ex_mem_mem_read   <= 1'b0;
+        ex_mem_mem_write  <= 1'b0;  ex_mem_wb_sel     <= 2'b0;
+        ex_mem_alu_result <= 32'b0; ex_mem_store_data <= 32'b0;
+        ex_mem_rd         <= 5'b0;  ex_mem_funct3     <= 3'b0;
+        ex_mem_pc_plus4   <= 32'b0; ex_mem_imm_u      <= 32'b0;
+    end else begin
+        ex_mem_reg_write  <= ex_reg_write_out;
+        ex_mem_mem_read   <= ex_mem_read_out;
+        ex_mem_mem_write  <= ex_mem_write_out;
+        ex_mem_wb_sel     <= ex_wb_sel_out;
+        ex_mem_alu_result <= ex_alu_result;
+        ex_mem_store_data <= ex_store_data_fwd;
+        ex_mem_rd         <= ex_rd_out;
+        ex_mem_funct3     <= id_ex_funct3;
+        ex_mem_pc_plus4   <= ex_pc_plus4_out;
+        ex_mem_imm_u      <= id_ex_imm;
+    end
+end
+
+============================================================
+STEP 8 — MEM/WB PIPELINE REGISTER
+============================================================
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        mem_wb_reg_write  <= 1'b0;  mem_wb_wb_sel     <= 2'b0;
+        mem_wb_alu_result <= 32'b0; mem_wb_mem_rdata  <= 32'b0;
+        mem_wb_rd         <= 5'b0;  mem_wb_pc_plus4   <= 32'b0;
+        mem_wb_imm_u      <= 32'b0;
+    end else begin
+        mem_wb_reg_write  <= mem_reg_write_out;
+        mem_wb_wb_sel     <= mem_wb_sel_out;
+        mem_wb_alu_result <= mem_alu_result_out;
+        mem_wb_mem_rdata  <= mem_rdata_out;
+        mem_wb_rd         <= mem_rd_out;
+        mem_wb_pc_plus4   <= mem_pc_plus4_out;
+        mem_wb_imm_u      <= mem_imm_u_out;
+    end
+end
+
+Coding constraints:
+- Declare ALL internal wires at top before any instantiation
+- Use exact wire and port names as specified above
+- Do NOT instantiate rv32i_alu — it is inside rv32i_ex_stage
+- Do NOT add any external ports — rv32i_top has only clk and rst_n
+- wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+- ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_1
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+## Overview
+
+The top-level module (`rv32i_top`) instantiates and connects all pipeline stages,
+pipeline registers, memory interfaces, the register file, and the hazard unit.
+
+---
+
+
+[Context 2]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_10
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## Common Integration Bugs
+
+- Connecting `imem_addr` directly to PC without word-aligning (`addr[31:2]`)
+- Forgetting to feed `wb_data` back to the register file — the WB stage output must loop back
+- Missing stall gate on PC — if stall does not hold the PC, it advances while IF/ID is frozen
+- Using `32'b0` as NOP instead of `32'h00000013` — all-zeros is not a defined NOP
+- Not resetting pipeline registers — stale control signals cause spurious writes on reset release
+
+
+[Context 3]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_8
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Summary
+- Extracts all instruction fields
+- Generates immediates and control signals
+- Reads register file (rs1_data, rs2_data)
+- Passes store_data as a SEPARATE output (= rs2_data_in, for MEM write data)
+- Passes all values to ID/EX pipeline register
+
+
+[Context 4]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_1
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Each stage is separated by a pipeline register. The pipeline register captures
+outputs of one stage and holds them for the next stage on the following clock cycle.
+
+Pipeline registers: IF_ID, ID_EX, EX_MEM, MEM_WB
+
+---
+
+
+[Context 5]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_16
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward Select Encoding
+
+```
+2'b00 = no forward — use ID/EX pipeline register value
+2'b01 = forward from MEM/WB stage (wb_data)
+2'b10 = forward from EX/MEM stage (ex_mem_alu_result)
+```
+
+EX/MEM takes priority over MEM/WB.
+
+
+[Context 6]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_6
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+
+### Instruction Memory
+
+```systemverilog
+module rv32i_imem #(
+    parameter string MEMFILE = ""
+) (
+    input  logic [31:0] addr,
+    output logic [31:0] rdata
+);
+    logic [31:0] mem [0:4095]; // 16KB
+
+    initial begin
+        if (MEMFILE != "")
+            $readmemh(MEMFILE, mem);
+    end
+
+    assign rdata = mem[addr[31:2]]; // word-addressed
+endmodule
+```
+
+
+[Context 7]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_20
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- On mem_read: load from data memory, sign/zero extend per funct3
+- On mem_write: store to data memory using store_data (forwarded rs2 from EX stage)
+
+
+[Context 8]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_9
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. `reg_write`, `rd_addr`, `wb_data` from the WB stage connect to the register file write port
+2. `rs1_addr`, `rs2_addr` from the ID stage connect to the register file read port
+3. `pc_next` is driven by the hazard/redirect logic in EX; feeds back to the IF stage PC register
+4. `stall_pc` gates the PC register enable
+5. `stall_if_id` gates the IF/ID pipeline register enable
+6. `flush_if_id` and `flush_id_ex` zero out their respective pipeline registers (insert NOP)
+7. All pipeline registers use asynchronous active-low reset (`negedge rst_n`)
+
+---
+
+
+[Context 9]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_2
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I hazard unit load use stall flush control
+
+## Module Hierarchy
+
+```
+rv32i_top
+├── rv32i_if_stage       (Instruction Fetch)
+├── rv32i_regfile        (Register File — read in ID, write in WB)
+├── rv32i_id_stage       (Instruction Decode)
+├── rv32i_alu_control    (ALU operation decoder)
+├── rv32i_ex_stage       (Execute — ALU, branch/jump resolution)
+├── rv32i_alu            (ALU — instantiated inside EX stage)
+├── rv32i_mem_stage      (Memory Access)
+├── rv32i_wb_stage       (Writeback)
+├── rv32i_hazard_unit    (Stall and flush control)
+└── Pipeline registers   (IF_ID, ID_EX, EX_MEM, MEM_WB — inside top or stages)
+```
+
+---
+
+
+[Context 10]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_3
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I memory load store byte enable sign extension
+
+## Top-Level Interface
+
+```systemverilog
+module rv32i_top (
+    input  logic        clk,
+    input  logic        rst_n,
+
+    // Instruction memory interface
+    output logic [31:0] imem_addr,
+    input  logic [31:0] imem_rdata,
+
+    // Data memory interface
+    output logic [31:0] dmem_addr,
+    output logic [31:0] dmem_wdata,
+    output logic [3:0]  dmem_byte_en,
+    output logic        dmem_we,
+    output logic        dmem_re,
+    input  logic [31:0] dmem_rdata
+);
+```
+
+---
+
+
+[Context 11]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_13
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_1', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+## Overview
+
+The top-level module (`rv32i_top`) instantiates and connects all pipeline stages,
+pipeline registers, memory interfaces, the register file, and the hazard unit.
+
+---
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_10', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## Common Integration Bugs
+
+- Connecting `imem_addr` directly to PC without word-aligning (`addr[31:2]`)
+- Forgetting to feed `wb_data` back to the register file — the WB stage output must loop back
+- Missing stall gate on PC — if stall does not hold the PC, it advances while IF/ID is frozen
+- Using `32'b0` as NOP instead of `32'h00000013` — all-zeros is not a defined NOP
+- Not resetting pipeline registers — stale control signals cause spurious writes on reset release
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_8', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Summary
+- Extracts all instruction fields
+- Generates immediates and control signals
+- Reads register file (rs1_data, rs2_data)
+- Passes store_data as a SEPARATE output (= rs2_data_in, for MEM write data)
+- Passes all values to ID/EX pipeline register
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_1', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Each stage is separated by a pipeline register. The pipeline register captures
+outputs of one stage and holds them for the next stage on the following clock cycle.
+
+Pipeline registers: IF_ID, ID_EX, EX_MEM, MEM_WB
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_16', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward Select Encoding
+
+```
+2'b00 = no forward — use ID/EX pipeline register value
+2'b01 = forward from MEM/WB stage (wb_data)
+2'b10 = forward from EX/MEM stage (ex_mem_alu_result)
+```
+
+EX/MEM takes priority over MEM/WB.
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_6', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+
+### Instruction Memory
+
+```systemverilog
+module rv32i_imem #(
+    parameter string MEMFILE = ""
+) (
+    input  logic [31:0] addr,
+    output logic [31:0] rdata
+);
+    logic [31:0] mem [0:4095]; // 16KB
+
+    initial begin
+        if (MEMFILE != "")
+            $readmemh(MEMFILE, mem);
+    end
+
+    assign rdata = mem[addr[31:2]]; // word-addressed
+endmodule
+```
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_20', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- On mem_read: load from data memory, sign/zero extend per funct3
+- On mem_write: store to data memory using store_data (forwarded rs2 from EX stage)
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_9', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. `reg_write`, `rd_addr`, `wb_data` from the WB stage connect to the register file write port
+2. `rs1_addr`, `rs2_addr` from the ID stage connect to the register file read port
+3. `pc_next` is driven by the hazard/redirect logic in EX; feeds back to the IF stage PC register
+4. `stall_pc` gates the PC register enable
+5. `stall_if_id` gates the IF/ID pipeline register enable
+6. `flush_if_id` and `flush_id_ex` zero out their respective pipeline registers (insert NOP)
+7. All pipeline registers use asynchronous active-low reset (`negedge rst_n`)
+
+---
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_2', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I hazard unit load use stall flush control
+
+## Module Hierarchy
+
+```
+rv32i_top
+├── rv32i_if_stage       (Instruction Fetch)
+├── rv32i_regfile        (Register File — read in ID, write in WB)
+├── rv32i_id_stage       (Instruction Decode)
+├── rv32i_alu_control    (ALU operation decoder)
+├── rv32i_ex_stage       (Execute — ALU, branch/jump resolution)
+├── rv32i_alu            (ALU — instantiated inside EX stage)
+├── rv32i_mem_stage      (Memory Access)
+├── rv32i_wb_stage       (Writeback)
+├── rv32i_hazard_unit    (Stall and flush control)
+└── Pipeline registers   (IF_ID, ID_EX, EX_MEM, MEM_WB — inside top or stages)
+```
+
+---
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_3', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I memory load store byte enable sign extension
+
+## Top-Level Interface
+
+```systemverilog
+module rv32i_top (
+    input  logic        clk,
+    input  logic        rst_n,
+
+    // Instruction memory interface
+    output logic [31:0] imem_addr,
+    input  logic [31:0] imem_rdata,
+
+    // Data memory interface
+    output logic [31:0] dmem_addr,
+    output logic [31:0] dmem_wdata,
+    output logic [3:0]  dmem_byte_en,
+    output logic        dmem_we,
+    output logic        dmem_re,
+    input  logic [31:0] dmem_rdata
+);
+```
+
+---
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_13', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+================================================================================
+

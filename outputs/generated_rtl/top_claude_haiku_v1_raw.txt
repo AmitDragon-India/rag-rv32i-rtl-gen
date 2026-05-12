@@ -1,0 +1,338 @@
+```systemverilog
+module rv32i_top #(
+    parameter int    MEM_DEPTH = 8192,
+    parameter string MEM_FILE  = ""
+) (
+    input  logic clk,
+    input  logic rst_n
+);
+
+    // ========================================================
+    // STEP 1 — DECLARE ALL INTERNAL WIRES
+    // ========================================================
+
+    // IF stage outputs
+    logic [31:0] if_instr, if_pc_out, if_pc_plus4;
+
+    // IF/ID pipeline register
+    logic [31:0] if_id_instr, if_id_pc, if_id_pc_plus4;
+
+    // alu_control output
+    logic [3:0]  alu_op_wire;
+
+    // regfile outputs
+    logic [31:0] rs1_data, rs2_data;
+
+    // ID stage outputs
+    logic [6:0]  id_opcode;
+    logic [2:0]  id_funct3;
+    logic [6:0]  id_funct7;
+    logic [4:0]  id_rs1, id_rs2, id_rd;
+    logic [31:0] id_imm;
+    logic [31:0] id_pc_out, id_pc_plus4_out;
+    logic [31:0] id_rs1_data_out, id_rs2_data_out;
+    logic [31:0] id_store_data;
+    logic        id_reg_write, id_mem_read, id_mem_write;
+    logic        id_branch, id_jump, id_alu_srcA;
+    logic [1:0]  id_alu_srcB, id_wb_sel;
+    logic [3:0]  id_alu_op_out;
+
+    // ID/EX pipeline register
+    logic        id_ex_reg_write, id_ex_mem_read, id_ex_mem_write;
+    logic        id_ex_branch, id_ex_jump, id_ex_alu_srcA;
+    logic [1:0]  id_ex_alu_srcB, id_ex_wb_sel;
+    logic [3:0]  id_ex_alu_op;
+    logic [31:0] id_ex_rs1_data, id_ex_rs2_data, id_ex_store_data;
+    logic [31:0] id_ex_imm, id_ex_pc, id_ex_pc_plus4;
+    logic [4:0]  id_ex_rd, id_ex_rs1, id_ex_rs2;
+    logic [2:0]  id_ex_funct3;
+    logic [6:0]  id_ex_opcode;
+
+    // forwarding unit outputs
+    logic [1:0]  forward_a, forward_b, forward_s;
+
+    // EX stage outputs
+    logic [31:0] ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out;
+    logic        ex_branch_taken, ex_redirect_en;
+    logic [31:0] ex_redirect_pc;
+    logic        ex_reg_write_out, ex_mem_read_out, ex_mem_write_out;
+    logic [4:0]  ex_rd_out;
+    logic [1:0]  ex_wb_sel_out;
+    logic [31:0] ex_imm_out;
+
+    // hazard unit outputs
+    logic        stall_pc, stall_if_id, flush_if_id, flush_id_ex;
+
+    // pc_next wire
+    logic [31:0] pc_next;
+
+    // EX/MEM pipeline register
+    logic        ex_mem_reg_write, ex_mem_mem_read, ex_mem_mem_write;
+    logic [1:0]  ex_mem_wb_sel;
+    logic [31:0] ex_mem_alu_result, ex_mem_store_data;
+    logic [4:0]  ex_mem_rd;
+    logic [2:0]  ex_mem_funct3;
+    logic [31:0] ex_mem_pc_plus4, ex_mem_imm_u;
+
+    // EX/MEM corrected forwarding value
+    logic [31:0] ex_mem_fwd_data;
+
+    // data memory wires
+    logic [31:0] dmem_addr, dmem_wdata, dmem_rdata;
+    logic [3:0]  dmem_byte_en;
+    logic        dmem_we, dmem_re;
+
+    // MEM stage outputs
+    logic [31:0] mem_pc_plus4_out, mem_imm_u_out;
+    logic [31:0] mem_rdata_out, mem_alu_result_out;
+    logic        mem_reg_write_out;
+    logic [4:0]  mem_rd_out;
+    logic [1:0]  mem_wb_sel_out;
+
+    // MEM/WB pipeline register
+    logic        mem_wb_reg_write;
+    logic [1:0]  mem_wb_wb_sel;
+    logic [31:0] mem_wb_alu_result, mem_wb_mem_rdata;
+    logic [4:0]  mem_wb_rd;
+    logic [31:0] mem_wb_pc_plus4, mem_wb_imm_u;
+
+    // WB stage output
+    logic [31:0] wb_data;
+
+    // ========================================================
+    // STEP 2 — INSTANTIATE SUBMODULES
+    // ========================================================
+
+    rv32i_if_stage #(.MEM_DEPTH(MEM_DEPTH), .MEM_FILE(MEM_FILE)) if_stage (
+        .clk(clk), .rst_n(rst_n),
+        .stall(stall_pc), .flush(flush_if_id),
+        .pc_next(pc_next),
+        .instr(if_instr), .pc_out(if_pc_out), .pc_plus4(if_pc_plus4)
+    );
+
+    rv32i_alu_control alu_ctrl (
+        .opcode(if_id_instr[6:0]),
+        .funct3(if_id_instr[14:12]),
+        .funct7(if_id_instr[31:25]),
+        .alu_op(alu_op_wire)
+    );
+
+    rv32i_regfile regfile (
+        .clk(clk), .rst_n(rst_n),
+        .rs1_addr(if_id_instr[19:15]),
+        .rs2_addr(if_id_instr[24:20]),
+        .rs1_data(rs1_data), .rs2_data(rs2_data),
+        .rd_addr(mem_wb_rd),
+        .rd_data(wb_data),
+        .reg_write(mem_wb_reg_write)
+    );
+
+    rv32i_id_stage id_stage (
+        .instr(if_id_instr),
+        .pc_in(if_id_pc), .pc_plus4_in(if_id_pc_plus4),
+        .rs1_data_in(rs1_data), .rs2_data_in(rs2_data),
+        .alu_op_in(alu_op_wire),
+        .opcode(id_opcode), .funct3(id_funct3), .funct7(id_funct7),
+        .rs1(id_rs1), .rs2(id_rs2), .rd(id_rd),
+        .imm(id_imm),
+        .pc_out(id_pc_out), .pc_plus4_out(id_pc_plus4_out),
+        .rs1_data_out(id_rs1_data_out), .rs2_data_out(id_rs2_data_out),
+        .store_data(id_store_data),
+        .reg_write(id_reg_write), .mem_read(id_mem_read), .mem_write(id_mem_write),
+        .branch(id_branch), .jump(id_jump),
+        .alu_srcA(id_alu_srcA), .alu_srcB(id_alu_srcB),
+        .wb_sel(id_wb_sel), .alu_op_out(id_alu_op_out)
+    );
+
+    rv32i_forward_unit fwd_unit (
+        .id_ex_rs1(id_ex_rs1), .id_ex_rs2(id_ex_rs2),
+        .id_ex_alu_srcB(id_ex_alu_srcB),
+        .ex_mem_reg_write(ex_mem_reg_write), .ex_mem_rd(ex_mem_rd),
+        .mem_wb_reg_write(mem_wb_reg_write), .mem_wb_rd(mem_wb_rd),
+        .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s)
+    );
+
+    // EX/MEM forwarding correction mux — must be before EX stage
+    always_comb begin
+        case (ex_mem_wb_sel)
+            2'b10:   ex_mem_fwd_data = ex_mem_pc_plus4;
+            2'b11:   ex_mem_fwd_data = ex_mem_imm_u;
+            default: ex_mem_fwd_data = ex_mem_alu_result;
+        endcase
+    end
+
+    rv32i_ex_stage ex_stage (
+        .rs1_data(id_ex_rs1_data), .rs2_data(id_ex_rs2_data),
+        .store_data(id_ex_store_data),
+        .imm(id_ex_imm), .pc_in(id_ex_pc), .pc_plus4_in(id_ex_pc_plus4),
+        .alu_srcA(id_ex_alu_srcA), .alu_srcB(id_ex_alu_srcB),
+        .alu_op(id_ex_alu_op), .funct3(id_ex_funct3),
+        .branch(id_ex_branch), .jump(id_ex_jump), .opcode(id_ex_opcode),
+        .forward_a(forward_a), .forward_b(forward_b), .forward_s(forward_s),
+        .ex_mem_alu_result(ex_mem_fwd_data),
+        .wb_data(wb_data),
+        .mem_read(id_ex_mem_read), .mem_write(id_ex_mem_write),
+        .wb_sel(id_ex_wb_sel), .reg_write(id_ex_reg_write), .rd(id_ex_rd),
+        .alu_result(ex_alu_result), .store_data_fwd(ex_store_data_fwd),
+        .pc_plus4_out(ex_pc_plus4_out),
+        .branch_taken(ex_branch_taken), .redirect_en(ex_redirect_en),
+        .redirect_pc(ex_redirect_pc),
+        .reg_write_out(ex_reg_write_out), .rd_out(ex_rd_out),
+        .wb_sel_out(ex_wb_sel_out),
+        .mem_read_out(ex_mem_read_out), .mem_write_out(ex_mem_write_out),
+        .imm_out(ex_imm_out)
+    );
+
+    rv32i_hazard_unit hazard_unit (
+        .if_id_instr(if_id_instr),
+        .id_ex_rd(id_ex_rd), .id_ex_mem_read(id_ex_mem_read),
+        .redirect_en(ex_redirect_en),
+        .stall_pc(stall_pc), .stall_if_id(stall_if_id),
+        .flush_if_id(flush_if_id), .flush_id_ex(flush_id_ex)
+    );
+
+    rv32i_mem_stage mem_stage (
+        .alu_result(ex_mem_alu_result),
+        .store_data(ex_mem_store_data),
+        .pc_plus4_in(ex_mem_pc_plus4), .imm_u_in(ex_mem_imm_u),
+        .mem_read(ex_mem_mem_read), .mem_write(ex_mem_mem_write),
+        .funct3(ex_mem_funct3), .wb_sel(ex_mem_wb_sel),
+        .reg_write(ex_mem_reg_write), .rd_in(ex_mem_rd),
+        .dmem_addr(dmem_addr), .dmem_wdata(dmem_wdata),
+        .dmem_byte_en(dmem_byte_en), .dmem_we(dmem_we), .dmem_re(dmem_re),
+        .dmem_rdata(dmem_rdata),
+        .pc_plus4_out(mem_pc_plus4_out), .imm_u_out(mem_imm_u_out),
+        .mem_rdata_out(mem_rdata_out), .alu_result_out(mem_alu_result_out),
+        .reg_write_out(mem_reg_write_out), .rd_out(mem_rd_out),
+        .wb_sel_out(mem_wb_sel_out)
+    );
+
+    rv32i_wb_stage wb_stage (
+        .alu_result(mem_wb_alu_result), .mem_rdata(mem_wb_mem_rdata),
+        .pc_plus4_in(mem_wb_pc_plus4), .imm_u_in(mem_wb_imm_u),
+        .wb_sel(mem_wb_wb_sel), .wb_data(wb_data)
+    );
+
+    // ========================================================
+    // STEP 3 — DATA MEMORY
+    // ========================================================
+
+    localparam int DMEM_ADDR_BITS = $clog2(MEM_DEPTH);
+
+    logic [31:0] dmem [0:MEM_DEPTH-1];
+
+    initial begin
+        string load_file;
+        if (MEM_FILE != "")
+            $readmemh(MEM_FILE, dmem);
+        else if ($value$plusargs("load=%s", load_file))
+            $readmemh(load_file, dmem);
+        dmem[32'h1000 >> 2] = 32'b0;
+    end
+
+    always_ff @(posedge clk) begin
+        if (dmem_we) begin
+            if (dmem_byte_en[0]) dmem[dmem_addr[DMEM_ADDR_BITS+1:2]][7:0]   <= dmem_wdata[7:0];
+            if (dmem_byte_en[1]) dmem[dmem_addr[DMEM_ADDR_BITS+1:2]][15:8]  <= dmem_wdata[15:8];
+            if (dmem_byte_en[2]) dmem[dmem_addr[DMEM_ADDR_BITS+1:2]][23:16] <= dmem_wdata[23:16];
+            if (dmem_byte_en[3]) dmem[dmem_addr[DMEM_ADDR_BITS+1:2]][31:24] <= dmem_wdata[31:24];
+        end
+    end
+
+    assign dmem_rdata = dmem[dmem_addr[DMEM_ADDR_BITS+1:2]];
+
+    // ========================================================
+    // STEP 4 — PC NEXT MUX
+    // ========================================================
+
+    always_comb begin
+        if (ex_redirect_en) pc_next = ex_redirect_pc;
+        else                pc_next = if_pc_plus4;
+    end
+
+    // ========================================================
+    // STEP 5 — IF/ID PIPELINE REGISTER
+    // ========================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n || flush_if_id) begin
+            if_id_instr <= 32'h00000013; if_id_pc <= 32'b0; if_id_pc_plus4 <= 32'b0;
+        end else if (!stall_if_id) begin
+            if_id_instr <= if_instr; if_id_pc <= if_pc_out; if_id_pc_plus4 <= if_pc_plus4;
+        end
+    end
+
+    // ========================================================
+    // STEP 6 — ID/EX PIPELINE REGISTER
+    // ========================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n || flush_id_ex) begin
+            id_ex_reg_write <= 1'b0; id_ex_mem_read  <= 1'b0; id_ex_mem_write <= 1'b0;
+            id_ex_branch    <= 1'b0; id_ex_jump       <= 1'b0; id_ex_alu_srcA  <= 1'b0;
+            id_ex_alu_srcB  <= 2'b0; id_ex_wb_sel     <= 2'b0; id_ex_alu_op    <= 4'b0;
+            id_ex_rs1_data  <= 32'b0; id_ex_rs2_data  <= 32'b0; id_ex_store_data <= 32'b0;
+            id_ex_imm       <= 32'b0; id_ex_pc        <= 32'b0; id_ex_pc_plus4  <= 32'b0;
+            id_ex_rd        <= 5'b0;  id_ex_rs1       <= 5'b0;  id_ex_rs2       <= 5'b0;
+            id_ex_funct3    <= 3'b0;  id_ex_opcode    <= 7'b0;
+        end else begin
+            id_ex_reg_write  <= id_reg_write;   id_ex_mem_read   <= id_mem_read;
+            id_ex_mem_write  <= id_mem_write;   id_ex_branch     <= id_branch;
+            id_ex_jump       <= id_jump;        id_ex_alu_srcA   <= id_alu_srcA;
+            id_ex_alu_srcB   <= id_alu_srcB;    id_ex_wb_sel     <= id_wb_sel;
+            id_ex_alu_op     <= id_alu_op_out;  id_ex_rs1_data   <= id_rs1_data_out;
+            id_ex_rs2_data   <= id_rs2_data_out; id_ex_store_data <= id_store_data;
+            id_ex_imm        <= id_imm;         id_ex_pc         <= id_pc_out;
+            id_ex_pc_plus4   <= id_pc_plus4_out; id_ex_rd        <= id_rd;
+            id_ex_rs1        <= id_rs1;         id_ex_rs2        <= id_rs2;
+            id_ex_funct3     <= id_funct3;      id_ex_opcode     <= id_opcode;
+        end
+    end
+
+    // ========================================================
+    // STEP 7 — EX/MEM PIPELINE REGISTER (reset only — never flush)
+    // ========================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ex_mem_reg_write <= 1'b0; ex_mem_mem_read  <= 1'b0; ex_mem_mem_write <= 1'b0;
+            ex_mem_wb_sel    <= 2'b0; ex_mem_alu_result <= 32'b0; ex_mem_store_data <= 32'b0;
+            ex_mem_rd        <= 5'b0; ex_mem_funct3    <= 3'b0;
+            ex_mem_pc_plus4  <= 32'b0; ex_mem_imm_u    <= 32'b0;
+        end else begin
+            ex_mem_reg_write  <= ex_reg_write_out;
+            ex_mem_mem_read   <= ex_mem_read_out;
+            ex_mem_mem_write  <= ex_mem_write_out;
+            ex_mem_wb_sel     <= ex_wb_sel_out;
+            ex_mem_alu_result <= ex_alu_result;
+            ex_mem_store_data <= ex_store_data_fwd;
+            ex_mem_rd         <= ex_rd_out;
+            ex_mem_funct3     <= id_ex_funct3;
+            ex_mem_pc_plus4   <= ex_pc_plus4_out;
+            ex_mem_imm_u      <= ex_imm_out;
+        end
+    end
+
+    // ========================================================
+    // STEP 8 — MEM/WB PIPELINE REGISTER (reset only — never flush)
+    // ========================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            mem_wb_reg_write <= 1'b0; mem_wb_wb_sel    <= 2'b0;
+            mem_wb_alu_result <= 32'b0; mem_wb_mem_rdata <= 32'b0;
+            mem_wb_rd        <= 5'b0; mem_wb_pc_plus4  <= 32'b0;
+            mem_wb_imm_u     <= 32'b0;
+        end else begin
+            mem_wb_reg_write  <= mem_reg_write_out;
+            mem_wb_wb_sel     <= mem_wb_sel_out;
+            mem_wb_alu_result <= mem_alu_result_out;
+            mem_wb_mem_rdata  <= mem_rdata_out;
+            mem_wb_rd         <= mem_rd_out;
+            mem_wb_pc_plus4   <= mem_pc_plus4_out;
+            mem_wb_imm_u      <= mem_imm_u_out;
+        end
+    end
+
+endmodule
+```

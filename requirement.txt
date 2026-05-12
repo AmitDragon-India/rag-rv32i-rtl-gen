@@ -1,0 +1,10 @@
+langchain
+langchain-community
+faiss-cpu
+sentence-transformers
+transformers
+python-dotenv
+tqdm
+pydantic
+requests
+markdown

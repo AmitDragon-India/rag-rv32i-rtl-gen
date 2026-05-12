@@ -1,0 +1,580 @@
+TASK LABEL:
+if_stage_claude_haiku_v1_attempt1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I Instruction Fetch (IF) stage.
+
+Module name: rv32i_if_stage
+
+Interface:
+input  logic        clk
+input  logic        rst_n
+input  logic        stall
+input  logic        flush
+input  logic [31:0] pc_next
+output logic [31:0] instr
+output logic [31:0] pc_out
+output logic [31:0] pc_plus4
+
+Parameters:
+parameter int    MEM_DEPTH = 8192
+parameter string MEM_FILE  = ""
+
+Behavior:
+- Memory loading in initial block:
+    if MEM_FILE != "": $readmemh(MEM_FILE, imem)
+    else: use $value$plusargs("load=%s", load_file) to load at runtime
+
+
+Coding constraints:
+- Use always_ff for sequential PC update.
+- Use continuous assignments for pc_out, pc_plus4, and instr.
+- Return only one complete SystemVerilog module.
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I Instruction Fetch (IF) stage.
+
+Module name: rv32i_if_stage
+
+Interface:
+input  logic        clk
+input  logic        rst_n
+input  logic        stall
+input  logic        flush
+input  logic [31:0] pc_next
+output logic [31:0] instr
+output logic [31:0] pc_out
+output logic [31:0] pc_plus4
+
+Parameters:
+parameter int    MEM_DEPTH = 8192
+parameter string MEM_FILE  = ""
+
+Behavior:
+- Memory loading in initial block:
+    if MEM_FILE != "": $readmemh(MEM_FILE, imem)
+    else: use $value$plusargs("load=%s", load_file) to load at runtime
+
+
+Coding constraints:
+- Use always_ff for sequential PC update.
+- Use continuous assignments for pc_out, pc_plus4, and instr.
+- Return only one complete SystemVerilog module.
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_18
+Source: 04_architecture
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+
+### Branch and Jump Resolution
+
+Branch comparison and target address generation are separate operations.
+
+#### Branch comparison
+- Uses `rs1_data` and `rs2_data`
+- Comparison result (`branch_taken`) determines whether branch redirects PC
+
+#### Branch target
+```
+branch_target = pc_in + imm_b
+```
+
+#### Jump targets
+```
+JAL  target = pc_in + imm_j
+JALR target = (rs1_data + imm_i) & ~32'h1   // clear LSB
+```
+
+#### Redirect logic
+- Jumps always redirect the PC
+- Branches redirect only when `branch_taken = 1`
+- On redirect: flush IF and ID pipeline registers (insert NOP = `32'h00000013`)
+
+---
+
+
+[Context 2]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_42
+Source: 02_Instruction
+Keywords: table reference specification
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: RV32I branch jump redirect PC target comparison
+
+## BEQ
+- category: branch
+- type: B-type
+- opcode: 1100011
+- funct3: 000
+- format: beq rs1, rs2, imm
+- encoding: [31]=imm[12] | [30:25]=imm[10:5] | [24:20]=rs2 | [19:15]=rs1 | [14:12]=funct3 | [11:8]=imm[4:1] | [7]=imm[11] | [6:0]=opcode
+- operation: if (x[rs1] == x[rs2]) pc = pc + sext(imm)
+
+
+[Context 3]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_5
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Key Behavior
+- PC resets to 0x00000000
+- When stall=1, PC holds its current value
+- When flush=1, instruction output is forced to NOP (32'h00000013)
+- Memory loaded via `$readmemh` from `+load=` plusarg at runtime
+- Word address = pc[clog2(MEM_DEPTH)+1:2]
+
+---
+
+
+[Context 4]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_16
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+
+[Context 5]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_6
+Source: 07_regfile_spec
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+
+## Common Bugs to Avoid
+
+- Making reads synchronous (registered) — causes one-cycle read delay breaking pipeline timing
+- Missing write-before-read bypass — causes stale register reads when WB and ID access the same register simultaneously
+- Forgetting `rd_addr != 5'b0` guard on write — allows corrupting the hardwired-zero register
+- Using `assign` for reads when bypass logic is needed — use `always_comb` instead
+
+---
+
+
+[Context 6]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_5
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+### IF/ID Register
+```
+if_id_instr    [31:0]   — raw instruction (rs1=[19:15], rs2=[24:20] for hazard unit)
+if_id_pc       [31:0]   — PC value
+if_id_pc_plus4 [31:0]   — PC + 4
+```
+
+
+[Context 7]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_3
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- Read instruction from instruction memory at current PC
+- Compute PC + 4
+- Support stall (hold PC) and flush (output NOP)
+
+
+[Context 8]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_2
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Module Hierarchy
+
+```
+rv32i_top
+├── rv32i_if_stage       (Instruction Fetch — includes internal imem)
+├── rv32i_id_stage       (Instruction Decode)
+├── rv32i_alu_control    (ALU operation decoder)
+├── rv32i_regfile        (Register File — read in ID, write in WB)
+├── rv32i_ex_stage       (Execute — includes rv32i_alu internally)
+├── rv32i_mem_stage      (Memory Access)
+├── rv32i_wb_stage       (Writeback — wb_sel mux)
+├── rv32i_hazard_unit    (Stall and flush control)
+├── rv32i_forward_unit   (Forwarding control)
+├── Data memory          (logic array inside rv32i_top)
+└── Pipeline registers   (IF/ID, ID/EX, EX/MEM, MEM/WB — inside rv32i_top)
+```
+
+---
+
+
+[Context 9]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_1
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Pipeline registers: IF/ID, ID/EX, EX/MEM, MEM/WB
+
+Only IF/ID and ID/EX are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+
+[Context 10]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_31
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### MEM/WB
+**Never flushed** (only reset). Holds: alu_result, mem_rdata, rd, wb_sel, reg_write, pc_plus4, imm_u.
+
+---
+
+
+[Context 11]
+Source: corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md
+Chunk ID: 06_common_rtl_bugs_and_fixes_sec_10
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_18', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+
+### Branch and Jump Resolution
+
+Branch comparison and target address generation are separate operations.
+
+#### Branch comparison
+- Uses `rs1_data` and `rs2_data`
+- Comparison result (`branch_taken`) determines whether branch redirects PC
+
+#### Branch target
+```
+branch_target = pc_in + imm_b
+```
+
+#### Jump targets
+```
+JAL  target = pc_in + imm_j
+JALR target = (rs1_data + imm_i) & ~32'h1   // clear LSB
+```
+
+#### Redirect logic
+- Jumps always redirect the PC
+- Branches redirect only when `branch_taken = 1`
+- On redirect: flush IF and ID pipeline registers (insert NOP = `32'h00000013`)
+
+---
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_42', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: table reference specification
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: RV32I branch jump redirect PC target comparison
+
+## BEQ
+- category: branch
+- type: B-type
+- opcode: 1100011
+- funct3: 000
+- format: beq rs1, rs2, imm
+- encoding: [31]=imm[12] | [30:25]=imm[10:5] | [24:20]=rs2 | [19:15]=rs1 | [14:12]=funct3 | [11:8]=imm[4:1] | [7]=imm[11] | [6:0]=opcode
+- operation: if (x[rs1] == x[rs2]) pc = pc + sext(imm)
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_5', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Key Behavior
+- PC resets to 0x00000000
+- When stall=1, PC holds its current value
+- When flush=1, instruction output is forced to NOP (32'h00000013)
+- Memory loaded via `$readmemh` from `+load=` plusarg at runtime
+- Word address = pc[clog2(MEM_DEPTH)+1:2]
+
+---
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_16', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_6', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+
+## Common Bugs to Avoid
+
+- Making reads synchronous (registered) — causes one-cycle read delay breaking pipeline timing
+- Missing write-before-read bypass — causes stale register reads when WB and ID access the same register simultaneously
+- Forgetting `rd_addr != 5'b0` guard on write — allows corrupting the hardwired-zero register
+- Using `assign` for reads when bypass logic is needed — use `always_comb` instead
+
+---
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_5', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+### IF/ID Register
+```
+if_id_instr    [31:0]   — raw instruction (rs1=[19:15], rs2=[24:20] for hazard unit)
+if_id_pc       [31:0]   — PC value
+if_id_pc_plus4 [31:0]   — PC + 4
+```
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_3', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- Read instruction from instruction memory at current PC
+- Compute PC + 4
+- Support stall (hold PC) and flush (output NOP)
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_2', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Module Hierarchy
+
+```
+rv32i_top
+├── rv32i_if_stage       (Instruction Fetch — includes internal imem)
+├── rv32i_id_stage       (Instruction Decode)
+├── rv32i_alu_control    (ALU operation decoder)
+├── rv32i_regfile        (Register File — read in ID, write in WB)
+├── rv32i_ex_stage       (Execute — includes rv32i_alu internally)
+├── rv32i_mem_stage      (Memory Access)
+├── rv32i_wb_stage       (Writeback — wb_sel mux)
+├── rv32i_hazard_unit    (Stall and flush control)
+├── rv32i_forward_unit   (Forwarding control)
+├── Data memory          (logic array inside rv32i_top)
+└── Pipeline registers   (IF/ID, ID/EX, EX/MEM, MEM/WB — inside rv32i_top)
+```
+
+---
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_1', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Pipeline registers: IF/ID, ID/EX, EX/MEM, MEM/WB
+
+Only IF/ID and ID/EX are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_31', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### MEM/WB
+**Never flushed** (only reset). Holds: alu_result, mem_rdata, rd, wb_sel, reg_write, pc_plus4, imm_u.
+
+---
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md', 'chunk_id': '06_common_rtl_bugs_and_fixes_sec_10', 'type': 'markdown'}
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+

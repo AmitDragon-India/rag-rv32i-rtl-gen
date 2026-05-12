@@ -1,0 +1,586 @@
+TASK LABEL:
+alu_control_claude_haiku_v1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for RV32I ALU control.
+
+Module name: rv32i_alu_control
+
+Interface:
+input  logic [6:0] opcode
+input  logic [2:0] funct3
+input  logic [6:0] funct7
+output logic [3:0] alu_op
+
+Use localparam for opcodes and alu_op encoding.
+Optionally use localparam for funct3 values to improve readability.
+
+Behavior:
+- Pure combinational (always_comb only)
+- Default alu_op = ALU_ADD
+- Use unique case(opcode) outer decode
+- For R_TYPE: nested unique case(funct3), use funct7[5] to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: nested unique case(funct3), use funct7[5] for SRAI vs SRLI
+- LOAD, STORE, AUIPC, JAL, JALR, LUI -> ALU_ADD
+- BRANCH -> ALU_SUB
+- Always include default case
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for RV32I ALU control.
+
+Module name: rv32i_alu_control
+
+Interface:
+input  logic [6:0] opcode
+input  logic [2:0] funct3
+input  logic [6:0] funct7
+output logic [3:0] alu_op
+
+Use localparam for opcodes and alu_op encoding.
+Optionally use localparam for funct3 values to improve readability.
+
+Behavior:
+- Pure combinational (always_comb only)
+- Default alu_op = ALU_ADD
+- Use unique case(opcode) outer decode
+- For R_TYPE: nested unique case(funct3), use funct7[5] to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: nested unique case(funct3), use funct7[5] for SRAI vs SRLI
+- LOAD, STORE, AUIPC, JAL, JALR, LUI -> ALU_ADD
+- BRANCH -> ALU_SUB
+- Always include default case
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_5
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+
+[Context 2]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_4
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibilities
+- Extract instruction fields (opcode, rd, rs1, rs2, funct3, funct7)
+- Generate immediate values (imm_i, imm_s, imm_b, imm_u, imm_j)
+- Generate high-level control signals
+- Pass `rs1_data` and `rs2_data` to EX stage
+- Select ALU operand sources (`alu_srcA`, `alu_srcB`)
+- Select writeback source (`wb_sel`)
+
+
+[Context 3]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_23
+Source: 04_architecture
+Keywords: table reference specification
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+
+### Decoding Rules
+
+| Instruction       | opcode  | funct3 | funct7  | alu_op   |
+|-------------------|---------|--------|---------|----------|
+| ADD               | 0110011 | 000    | 0000000 | ALU_ADD  |
+| SUB               | 0110011 | 000    | 0100000 | ALU_SUB  |
+| AND               | 0110011 | 111    | 0000000 | ALU_AND  |
+| OR                | 0110011 | 110    | 0000000 | ALU_OR   |
+| XOR               | 0110011 | 100    | 0000000 | ALU_XOR  |
+| SLT               | 0110011 | 010    | 0000000 | ALU_SLT  |
+| SLTU              | 0110011 | 011    | 0000000 | ALU_SLTU |
+| SLL               | 0110011 | 001    | 0000000 | ALU_SLL  |
+| SRL               | 0110011 | 101    | 0000000 | ALU_SRL  |
+| SRA               | 0110011 | 101    | 0100000 | ALU_SRA  |
+| ADDI              | 0010011 | 000    | -       | ALU_ADD  |
+| SLTI              | 0010011 | 010    | -       | ALU_SLT  |
+| SLTIU             | 0010011 | 011    | -       | ALU_SLTU |
+| ANDI              | 0010011 | 111    | -       | ALU_AND  |
+| ORI               | 0010011 | 110    | -       | ALU_OR   |
+| XORI              | 0010011 | 100    | -       | ALU_XOR  |
+| SLLI              | 0010011 | 001    | 0000000 | ALU_SLL  |
+| SRLI              | 0010011 | 101    | 0000000 | ALU_SRL  |
+| SRAI              | 0010011 | 101    | 0100000 | ALU_SRA  |
+| Load/Store/AUIPC  | varies  | -      | -       | ALU_ADD  |
+
+
+[Context 4]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_24
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+## ID Stage Interface — Complete
+
+```systemverilog
+module rv32i_id_stage (
+    input  logic [31:0] instr,
+    input  logic [31:0] pc_in,
+    input  logic [31:0] pc_plus4_in,
+    input  logic [31:0] rs1_data_in,
+    input  logic [31:0] rs2_data_in,
+    input  logic [3:0]  alu_op_in,       // passed through from rv32i_alu_control
+
+    output logic [6:0]  opcode,
+    output logic [2:0]  funct3,
+    output logic [6:0]  funct7,
+    output logic [4:0]  rs1,
+    output logic [4:0]  rs2,
+    output logic [4:0]  rd,
+    output logic [31:0] imm,
+
+    output logic [31:0] pc_out,
+    output logic [31:0] pc_plus4_out,
+    output logic [31:0] rs1_data_out,
+    output logic [31:0] rs2_data_out,
+    output logic [31:0] store_data,      // = rs2_data_in, separate port for MEM write path
+
+    output logic        reg_write,
+    output logic        mem_read,
+    output logic        mem_write,
+    output logic        branch,
+    output logic        jump,
+    output logic        alu_srcA,
+    output logic [1:0]  alu_srcB,
+    output logic [1:0]  wb_sel,
+
+    output logic [3:0]  alu_op_out       // pass-through of alu_op_in
+);
+```
+
+
+[Context 5]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_6
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+
+[Context 6]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_7
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibility
+- Decode instruction fields (opcode, funct3, funct7, rs1, rs2, rd)
+- Generate all immediate types (I, S, B, U, J)
+- Generate control signals (reg_write, mem_read, mem_write, branch, jump, alu_srcA, alu_srcB, wb_sel)
+- Read register file
+- Pass store_data (= rs2_data) as a SEPARATE output for the MEM write data path
+
+
+[Context 7]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_5
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+
+[Context 8]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_6
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### ID/EX Register
+```
+id_ex_reg_write          id_ex_rs1_data   [31:0]
+id_ex_mem_read           id_ex_rs2_data   [31:0]
+id_ex_mem_write          id_ex_store_data [31:0]
+id_ex_branch             id_ex_imm        [31:0]
+id_ex_jump               id_ex_pc         [31:0]
+id_ex_alu_srcA           id_ex_pc_plus4   [31:0]
+id_ex_alu_srcB  [1:0]    id_ex_rd         [4:0]
+id_ex_wb_sel    [1:0]    id_ex_rs1        [4:0]
+id_ex_alu_op    [3:0]    id_ex_rs2        [4:0]
+id_ex_funct3    [2:0]    id_ex_opcode     [6:0]
+```
+
+
+[Context 9]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_13
+Source: 03_pipeline_stages
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+
+### alu_srcB encoding
+- 2'b00 = rs2_data (R-type, branch)
+- 2'b01 = imm (I-type, load, store, AUIPC, LUI)
+- 2'b10 = 32'd4 (not commonly used directly)
+
+
+[Context 10]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_3
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+
+[Context 11]
+Source: corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md
+Chunk ID: 06_common_rtl_bugs_and_fixes_sec_10
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_5', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_4', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibilities
+- Extract instruction fields (opcode, rd, rs1, rs2, funct3, funct7)
+- Generate immediate values (imm_i, imm_s, imm_b, imm_u, imm_j)
+- Generate high-level control signals
+- Pass `rs1_data` and `rs2_data` to EX stage
+- Select ALU operand sources (`alu_srcA`, `alu_srcB`)
+- Select writeback source (`wb_sel`)
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_23', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: table reference specification
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+
+### Decoding Rules
+
+| Instruction       | opcode  | funct3 | funct7  | alu_op   |
+|-------------------|---------|--------|---------|----------|
+| ADD               | 0110011 | 000    | 0000000 | ALU_ADD  |
+| SUB               | 0110011 | 000    | 0100000 | ALU_SUB  |
+| AND               | 0110011 | 111    | 0000000 | ALU_AND  |
+| OR                | 0110011 | 110    | 0000000 | ALU_OR   |
+| XOR               | 0110011 | 100    | 0000000 | ALU_XOR  |
+| SLT               | 0110011 | 010    | 0000000 | ALU_SLT  |
+| SLTU              | 0110011 | 011    | 0000000 | ALU_SLTU |
+| SLL               | 0110011 | 001    | 0000000 | ALU_SLL  |
+| SRL               | 0110011 | 101    | 0000000 | ALU_SRL  |
+| SRA               | 0110011 | 101    | 0100000 | ALU_SRA  |
+| ADDI              | 0010011 | 000    | -       | ALU_ADD  |
+| SLTI              | 0010011 | 010    | -       | ALU_SLT  |
+| SLTIU             | 0010011 | 011    | -       | ALU_SLTU |
+| ANDI              | 0010011 | 111    | -       | ALU_AND  |
+| ORI               | 0010011 | 110    | -       | ALU_OR   |
+| XORI              | 0010011 | 100    | -       | ALU_XOR  |
+| SLLI              | 0010011 | 001    | 0000000 | ALU_SLL  |
+| SRLI              | 0010011 | 101    | 0000000 | ALU_SRL  |
+| SRAI              | 0010011 | 101    | 0100000 | ALU_SRA  |
+| Load/Store/AUIPC  | varies  | -      | -       | ALU_ADD  |
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_24', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+## ID Stage Interface — Complete
+
+```systemverilog
+module rv32i_id_stage (
+    input  logic [31:0] instr,
+    input  logic [31:0] pc_in,
+    input  logic [31:0] pc_plus4_in,
+    input  logic [31:0] rs1_data_in,
+    input  logic [31:0] rs2_data_in,
+    input  logic [3:0]  alu_op_in,       // passed through from rv32i_alu_control
+
+    output logic [6:0]  opcode,
+    output logic [2:0]  funct3,
+    output logic [6:0]  funct7,
+    output logic [4:0]  rs1,
+    output logic [4:0]  rs2,
+    output logic [4:0]  rd,
+    output logic [31:0] imm,
+
+    output logic [31:0] pc_out,
+    output logic [31:0] pc_plus4_out,
+    output logic [31:0] rs1_data_out,
+    output logic [31:0] rs2_data_out,
+    output logic [31:0] store_data,      // = rs2_data_in, separate port for MEM write path
+
+    output logic        reg_write,
+    output logic        mem_read,
+    output logic        mem_write,
+    output logic        branch,
+    output logic        jump,
+    output logic        alu_srcA,
+    output logic [1:0]  alu_srcB,
+    output logic [1:0]  wb_sel,
+
+    output logic [3:0]  alu_op_out       // pass-through of alu_op_in
+);
+```
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_6', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_7', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibility
+- Decode instruction fields (opcode, funct3, funct7, rs1, rs2, rd)
+- Generate all immediate types (I, S, B, U, J)
+- Generate control signals (reg_write, mem_read, mem_write, branch, jump, alu_srcA, alu_srcB, wb_sel)
+- Read register file
+- Pass store_data (= rs2_data) as a SEPARATE output for the MEM write data path
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_5', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_6', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### ID/EX Register
+```
+id_ex_reg_write          id_ex_rs1_data   [31:0]
+id_ex_mem_read           id_ex_rs2_data   [31:0]
+id_ex_mem_write          id_ex_store_data [31:0]
+id_ex_branch             id_ex_imm        [31:0]
+id_ex_jump               id_ex_pc         [31:0]
+id_ex_alu_srcA           id_ex_pc_plus4   [31:0]
+id_ex_alu_srcB  [1:0]    id_ex_rd         [4:0]
+id_ex_wb_sel    [1:0]    id_ex_rs1        [4:0]
+id_ex_alu_op    [3:0]    id_ex_rs2        [4:0]
+id_ex_funct3    [2:0]    id_ex_opcode     [6:0]
+```
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_13', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+
+### alu_srcB encoding
+- 2'b00 = rs2_data (R-type, branch)
+- 2'b01 = imm (I-type, load, store, AUIPC, LUI)
+- 2'b10 = 32'd4 (not commonly used directly)
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_3', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md', 'chunk_id': '06_common_rtl_bugs_and_fixes_sec_10', 'type': 'markdown'}
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+

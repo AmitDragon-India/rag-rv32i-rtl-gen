@@ -1,0 +1,522 @@
+TASK LABEL:
+hazard_unit_claude_haiku_v1_attempt1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I pipeline hazard unit.
+
+Module name: rv32i_hazard_unit
+
+Interface:
+input  logic [31:0] if_id_instr
+input  logic [4:0]  id_ex_rd
+input  logic        id_ex_mem_read
+input  logic        redirect_en
+output logic        stall_pc
+output logic        stall_if_id
+output logic        flush_if_id
+output logic        flush_id_ex
+
+Behavior:
+- Use assign statements to extract rs1=if_id_instr[19:15], rs2=if_id_instr[24:20]
+- Use assign to compute load_use_hazard: id_ex_mem_read=1 AND id_ex_rd!=0 AND (id_ex_rd==rs1 OR id_ex_rd==rs2)
+- All outputs default to 0 at top of always_comb
+- On load_use_hazard: stall_pc=1, stall_if_id=1, flush_if_id=0, flush_id_ex=1
+- On redirect_en (else if): stall_pc=0, stall_if_id=0, flush_if_id=1, flush_id_ex=1
+- load_use_hazard takes priority over redirect_en (use if/else if)
+- flush_id_ex=1 on BOTH load-use AND redirect — this is critical
+- Pure combinational always_comb only
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I pipeline hazard unit.
+
+Module name: rv32i_hazard_unit
+
+Interface:
+input  logic [31:0] if_id_instr
+input  logic [4:0]  id_ex_rd
+input  logic        id_ex_mem_read
+input  logic        redirect_en
+output logic        stall_pc
+output logic        stall_if_id
+output logic        flush_if_id
+output logic        flush_id_ex
+
+Behavior:
+- Use assign statements to extract rs1=if_id_instr[19:15], rs2=if_id_instr[24:20]
+- Use assign to compute load_use_hazard: id_ex_mem_read=1 AND id_ex_rd!=0 AND (id_ex_rd==rs1 OR id_ex_rd==rs2)
+- All outputs default to 0 at top of always_comb
+- On load_use_hazard: stall_pc=1, stall_if_id=1, flush_if_id=0, flush_id_ex=1
+- On redirect_en (else if): stall_pc=0, stall_if_id=0, flush_if_id=1, flush_id_ex=1
+- load_use_hazard takes priority over redirect_en (use if/else if)
+- flush_id_ex=1 on BOTH load-use AND redirect — this is critical
+- Pure combinational always_comb only
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_9
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Key Rules
+- `flush_id_ex=1` on BOTH load-use hazard AND redirect — the ID/EX must always be flushed in both cases
+- `flush_if_id=1` only on redirect (not on load-use — IF/ID is stalled, not flushed)
+- `stall_pc` and `stall_if_id` only on load-use hazard (not on redirect)
+- Never simultaneously stall and flush the same register
+
+---
+
+
+[Context 2]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_3
+Source: 09_hazard_control
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+## Load-Use Hazard
+
+A load produces its result in MEM stage. The next instruction cannot be forwarded in time — one stall cycle is required.
+
+Detection: `id_ex_mem_read=1` AND `id_ex_rd != 0` AND `id_ex_rd` matches rs1 or rs2 of instruction in IF/ID.
+
+Action:
+- Stall PC (hold current PC)
+- Stall IF/ID (hold current instruction)
+- Flush ID/EX (insert bubble)
+
+---
+
+
+[Context 3]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_28
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+### IF/ID
+Flushed on redirect or reset. Stalled on load-use hazard.
+Holds: instr, pc, pc_plus4
+
+
+[Context 4]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_7
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Behavior
+
+- Extract rs1 and rs2 from `if_id_instr` using `assign` statements outside always_comb
+- Compute `load_use_hazard` as a combinational `assign`
+- Use `always_comb` with if/else for output assignments
+- Priority: load_use_hazard takes priority over redirect_en
+
+
+[Context 5]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_1
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Overview
+
+A 5-stage in-order pipeline has two classes of hazards:
+- **Control hazards** — caused by branches and jumps redirecting the PC
+- **Data hazards** — caused by instructions reading a register before a prior instruction writes it
+
+This pipeline implements:
+- **Forwarding unit** — eliminates most RAW hazards without stalling
+- **Hazard unit** — handles load-use hazards (1 stall) and control hazards (flush)
+
+Only IF/ID and ID/EX registers are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+
+[Context 6]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_1
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Pipeline registers: IF/ID, ID/EX, EX/MEM, MEM/WB
+
+Only IF/ID and ID/EX are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+
+[Context 7]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_8
+Source: 09_hazard_control
+Keywords: table reference specification
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Output Truth Table
+
+| Condition          | stall_pc | stall_if_id | flush_if_id | flush_id_ex |
+|--------------------|----------|-------------|-------------|-------------|
+| load_use_hazard    | 1        | 1           | 0           | 1           |
+| redirect_en        | 0        | 0           | 1           | 1           |
+| neither            | 0        | 0           | 0           | 0           |
+
+
+[Context 8]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_32
+Source: 03_pipeline_stages
+Keywords: table reference specification
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+## Hazard Control Summary
+
+| Condition       | stall_pc | stall_if_id | flush_if_id | flush_id_ex |
+|----------------|----------|-------------|-------------|-------------|
+| load-use hazard | 1        | 1           | 0           | 1           |
+| redirect_en     | 0        | 0           | 1           | 1           |
+| normal          | 0        | 0           | 0           | 0           |
+
+
+[Context 9]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_5
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+### IF/ID Register
+```
+if_id_instr    [31:0]   — raw instruction (rs1=[19:15], rs2=[24:20] for hazard unit)
+if_id_pc       [31:0]   — PC value
+if_id_pc_plus4 [31:0]   — PC + 4
+```
+
+
+[Context 10]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_3
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- Read instruction from instruction memory at current PC
+- Compute PC + 4
+- Support stall (hold PC) and flush (output NOP)
+
+
+[Context 11]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_13
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_3
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_9', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Key Rules
+- `flush_id_ex=1` on BOTH load-use hazard AND redirect — the ID/EX must always be flushed in both cases
+- `flush_if_id=1` only on redirect (not on load-use — IF/ID is stalled, not flushed)
+- `stall_pc` and `stall_if_id` only on load-use hazard (not on redirect)
+- Never simultaneously stall and flush the same register
+
+---
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_3', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+## Load-Use Hazard
+
+A load produces its result in MEM stage. The next instruction cannot be forwarded in time — one stall cycle is required.
+
+Detection: `id_ex_mem_read=1` AND `id_ex_rd != 0` AND `id_ex_rd` matches rs1 or rs2 of instruction in IF/ID.
+
+Action:
+- Stall PC (hold current PC)
+- Stall IF/ID (hold current instruction)
+- Flush ID/EX (insert bubble)
+
+---
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_28', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+### IF/ID
+Flushed on redirect or reset. Stalled on load-use hazard.
+Holds: instr, pc, pc_plus4
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_7', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Behavior
+
+- Extract rs1 and rs2 from `if_id_instr` using `assign` statements outside always_comb
+- Compute `load_use_hazard` as a combinational `assign`
+- Use `always_comb` with if/else for output assignments
+- Priority: load_use_hazard takes priority over redirect_en
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_1', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Overview
+
+A 5-stage in-order pipeline has two classes of hazards:
+- **Control hazards** — caused by branches and jumps redirecting the PC
+- **Data hazards** — caused by instructions reading a register before a prior instruction writes it
+
+This pipeline implements:
+- **Forwarding unit** — eliminates most RAW hazards without stalling
+- **Hazard unit** — handles load-use hazards (1 stall) and control hazards (flush)
+
+Only IF/ID and ID/EX registers are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_1', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I branch jump redirect PC target comparison
+
+## Pipeline Overview
+
+```
+IF -> ID -> EX -> MEM -> WB
+```
+
+Pipeline registers: IF/ID, ID/EX, EX/MEM, MEM/WB
+
+Only IF/ID and ID/EX are flushed on redirect. EX/MEM and MEM/WB are never flushed.
+
+---
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_8', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: table reference specification
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+### Output Truth Table
+
+| Condition          | stall_pc | stall_if_id | flush_if_id | flush_id_ex |
+|--------------------|----------|-------------|-------------|-------------|
+| load_use_hazard    | 1        | 1           | 0           | 1           |
+| redirect_en        | 0        | 0           | 1           | 1           |
+| neither            | 0        | 0           | 0           | 0           |
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_32', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: table reference specification
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I hazard unit load use stall flush control
+
+## Hazard Control Summary
+
+| Condition       | stall_pc | stall_if_id | flush_if_id | flush_id_ex |
+|----------------|----------|-------------|-------------|-------------|
+| load-use hazard | 1        | 1           | 0           | 1           |
+| redirect_en     | 0        | 0           | 1           | 1           |
+| normal          | 0        | 0           | 0           | 0           |
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_5', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I pipeline stall flush hazard control
+
+### IF/ID Register
+```
+if_id_instr    [31:0]   — raw instruction (rs1=[19:15], rs2=[24:20] for hazard unit)
+if_id_pc       [31:0]   — PC value
+if_id_pc_plus4 [31:0]   — PC + 4
+```
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_3', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+
+### Responsibility
+- Read instruction from instruction memory at current PC
+- Compute PC + 4
+- Support stall (hold PC) and flush (output NOP)
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_13', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_3', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+================================================================================
+

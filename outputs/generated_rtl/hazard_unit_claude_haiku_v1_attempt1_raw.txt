@@ -1,0 +1,50 @@
+```systemverilog
+module rv32i_hazard_unit (
+    input  logic [31:0] if_id_instr,
+    input  logic [4:0]  id_ex_rd,
+    input  logic        id_ex_mem_read,
+    input  logic        redirect_en,
+    output logic        stall_pc,
+    output logic        stall_if_id,
+    output logic        flush_if_id,
+    output logic        flush_id_ex
+);
+
+    // Extract rs1 and rs2 from instruction
+    logic [4:0] rs1;
+    logic [4:0] rs2;
+    
+    assign rs1 = if_id_instr[19:15];
+    assign rs2 = if_id_instr[24:20];
+    
+    // Compute load-use hazard condition
+    logic load_use_hazard;
+    
+    assign load_use_hazard = id_ex_mem_read & (id_ex_rd != 5'b0) & 
+                             ((id_ex_rd == rs1) | (id_ex_rd == rs2));
+    
+    // Combinational hazard control logic
+    always_comb begin
+        // Default all outputs to 0
+        stall_pc    = 1'b0;
+        stall_if_id = 1'b0;
+        flush_if_id = 1'b0;
+        flush_id_ex = 1'b0;
+        
+        // Priority: load_use_hazard takes precedence over redirect_en
+        if (load_use_hazard) begin
+            stall_pc    = 1'b1;
+            stall_if_id = 1'b1;
+            flush_if_id = 1'b0;
+            flush_id_ex = 1'b1;
+        end
+        else if (redirect_en) begin
+            stall_pc    = 1'b0;
+            stall_if_id = 1'b0;
+            flush_if_id = 1'b1;
+            flush_id_ex = 1'b1;
+        end
+    end
+
+endmodule
+```

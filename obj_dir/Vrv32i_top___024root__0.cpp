@@ -476,14 +476,21 @@ void Vrv32i_top___024root___nba_sequent__TOP__1(Vrv32i_top___024root* vlSelf) {
                                                     ((~ (IData)(vlSelfRef.rst_n)) 
                                                      | (IData)(vlSelfRef.rv32i_top__DOT__flush_id_ex)))) 
                                                 && (IData)(vlSelfRef.rv32i_top__DOT__id_mem_read));
-    if (vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA) {
-        if ((1U & (~ (IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA)))) {
+    if ((1U & (~ VL_ONEHOT_I((((IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA) 
+                               << 1U) | (1U & (~ (IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA)))))))) {
+        if ((0U == (((IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA) 
+                     << 1U) | (1U & (~ (IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA)))))) {
             if (VL_UNLIKELY((vlSymsp->_vm_contextp__->assertOn()))) {
-                VL_WRITEF_NX("[%0t] %%Error: rv32i_ex_stage.sv:51: Assertion failed in %m: unique case, but multiple matches found for '1'h%X'\n",4, 'M',vlSymsp->name(),"rv32i_top.ex_stage", 'T',-12
+                VL_WRITEF_NX("[%0t] %%Error: rv32i_ex_stage.sv:51: Assertion failed in %m: unique case, but none matched for '1'h%X'\n",4, 'M',vlSymsp->name(),"rv32i_top.ex_stage", 'T',-12
                              , '#',64,VL_TIME_UNITED_Q(1)
                              , '#',1,(IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA));
                 VL_STOP_MT("outputs/generated_rtl/rv32i_ex_stage.sv", 51, "");
             }
+        } else if (VL_UNLIKELY((vlSymsp->_vm_contextp__->assertOn()))) {
+            VL_WRITEF_NX("[%0t] %%Error: rv32i_ex_stage.sv:51: Assertion failed in %m: unique case, but multiple matches found for '1'h%X'\n",4, 'M',vlSymsp->name(),"rv32i_top.ex_stage", 'T',-12
+                         , '#',64,VL_TIME_UNITED_Q(1)
+                         , '#',1,(IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcA));
+            VL_STOP_MT("outputs/generated_rtl/rv32i_ex_stage.sv", 51, "");
         }
     }
     if ((1U & (~ VL_ONEHOT_I((((2U == (IData)(vlSelfRef.rv32i_top__DOT__id_ex_alu_srcB)) 
@@ -1211,11 +1218,14 @@ void Vrv32i_top___024root___nba_comb__TOP__0(Vrv32i_top___024root* vlSelf) {
     // Locals
     CData/*1:0*/ rv32i_top__DOT__mem_stage__DOT__byte_off;
     rv32i_top__DOT__mem_stage__DOT__byte_off = 0;
+    IData/*31:0*/ rv32i_top__DOT__mem_stage__DOT__loaded_data;
+    rv32i_top__DOT__mem_stage__DOT__loaded_data = 0;
     // Body
     vlSelfRef.rv32i_top__DOT__dmem_wdata = 0U;
     vlSelfRef.rv32i_top__DOT__dmem_byte_en = 0U;
     vlSelfRef.rv32i_top__DOT__dmem_we = 0U;
     vlSelfRef.rv32i_top__DOT__mem_rdata_out = 0U;
+    rv32i_top__DOT__mem_stage__DOT__loaded_data = 0U;
     rv32i_top__DOT__mem_stage__DOT__byte_off = (3U 
                                                 & vlSelfRef.rv32i_top__DOT__ex_mem_alu_result);
     if (vlSelfRef.rv32i_top__DOT__ex_mem_mem_write) {
@@ -1227,12 +1237,15 @@ void Vrv32i_top___024root___nba_comb__TOP__0(Vrv32i_top___024root* vlSelf) {
                 VL_SHIFTL_III(32,32,32, vlSelfRef.rv32i_top__DOT__ex_mem_store_data, 
                               VL_SHIFTL_III(32,32,32, (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off), 3U));
         } else if ((1U == (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
-            vlSelfRef.rv32i_top__DOT__dmem_byte_en 
-                = ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                    ? 0x0cU : 3U);
-            vlSelfRef.rv32i_top__DOT__dmem_wdata = 
-                VL_SHIFTL_III(32,32,32, vlSelfRef.rv32i_top__DOT__ex_mem_store_data, 
-                              VL_SHIFTL_III(32,32,32, (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off), 3U));
+            if ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))) {
+                vlSelfRef.rv32i_top__DOT__dmem_byte_en = 0x0cU;
+                vlSelfRef.rv32i_top__DOT__dmem_wdata 
+                    = VL_SHIFTL_III(32,32,32, vlSelfRef.rv32i_top__DOT__ex_mem_store_data, 0x00000010U);
+            } else {
+                vlSelfRef.rv32i_top__DOT__dmem_byte_en = 3U;
+                vlSelfRef.rv32i_top__DOT__dmem_wdata 
+                    = vlSelfRef.rv32i_top__DOT__ex_mem_store_data;
+            }
         } else if ((2U == (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
             vlSelfRef.rv32i_top__DOT__dmem_byte_en = 0x0fU;
             vlSelfRef.rv32i_top__DOT__dmem_wdata = vlSelfRef.rv32i_top__DOT__ex_mem_store_data;
@@ -1249,204 +1262,141 @@ void Vrv32i_top___024root___nba_comb__TOP__0(Vrv32i_top___024root* vlSelf) {
                          << 2U) | (((1U == (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3)) 
                                     << 1U) | (0U == (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3)))))) {
                 if (VL_UNLIKELY((vlSymsp->_vm_contextp__->assertOn()))) {
-                    VL_WRITEF_NX("[%0t] %%Error: rv32i_mem_stage.sv:61: Assertion failed in %m: unique case, but multiple matches found for '3'h%X'\n",4, 'M',vlSymsp->name(),"rv32i_top.mem_stage", 'T',-12
+                    VL_WRITEF_NX("[%0t] %%Error: rv32i_mem_stage.sv:65: Assertion failed in %m: unique case, but multiple matches found for '3'h%X'\n",4, 'M',vlSymsp->name(),"rv32i_top.mem_stage", 'T',-12
                                  , '#',64,VL_TIME_UNITED_Q(1)
                                  , '#',3,(IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3));
-                    VL_STOP_MT("outputs/generated_rtl/rv32i_mem_stage.sv", 61, "");
+                    VL_STOP_MT("outputs/generated_rtl/rv32i_mem_stage.sv", 65, "");
                 }
             }
         }
     }
     if (vlSelfRef.rv32i_top__DOT__ex_mem_mem_read) {
-        vlSelfRef.rv32i_top__DOT__mem_rdata_out = (
-                                                   (4U 
-                                                    & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                    ? 
-                                                   ((2U 
-                                                     & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                     ? 0U
-                                                     : 
-                                                    ((1U 
-                                                      & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                      ? 
-                                                     ((2U 
-                                                       & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                       ? 
-                                                      (vlSelfRef.rv32i_top__DOT__dmem
-                                                       [
-                                                       (0x00001fffU 
-                                                        & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                           >> 2U))] 
-                                                       >> 0x10U)
-                                                       : 
-                                                      (0x0000ffffU 
-                                                       & vlSelfRef.rv32i_top__DOT__dmem
-                                                       [
-                                                       (0x00001fffU 
-                                                        & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                           >> 2U))]))
-                                                      : 
-                                                     ((2U 
-                                                       & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                       ? 
-                                                      ((1U 
-                                                        & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                        ? 
-                                                       (vlSelfRef.rv32i_top__DOT__dmem
-                                                        [
-                                                        (0x00001fffU 
-                                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                            >> 2U))] 
-                                                        >> 0x18U)
-                                                        : 
-                                                       (0x000000ffU 
-                                                        & (vlSelfRef.rv32i_top__DOT__dmem
-                                                           [
-                                                           (0x00001fffU 
-                                                            & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                               >> 2U))] 
-                                                           >> 0x10U)))
-                                                       : 
-                                                      ((1U 
-                                                        & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                        ? 
-                                                       (0x000000ffU 
-                                                        & (vlSelfRef.rv32i_top__DOT__dmem
-                                                           [
-                                                           (0x00001fffU 
-                                                            & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                               >> 2U))] 
-                                                           >> 8U))
-                                                        : 
-                                                       (0x000000ffU 
-                                                        & vlSelfRef.rv32i_top__DOT__dmem
-                                                        [
-                                                        (0x00001fffU 
-                                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                            >> 2U))])))))
-                                                    : 
-                                                   ((2U 
-                                                     & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                     ? 
-                                                    ((1U 
-                                                      & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                      ? 0U
-                                                      : vlSelfRef.rv32i_top__DOT__dmem
-                                                     [
-                                                     (0x00001fffU 
-                                                      & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                         >> 2U))])
-                                                     : 
-                                                    ((1U 
-                                                      & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
-                                                      ? 
-                                                     ((2U 
-                                                       & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                       ? 
-                                                      (((- (IData)(
-                                                                   (vlSelfRef.rv32i_top__DOT__dmem
-                                                                    [
-                                                                    (0x00001fffU 
-                                                                     & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                        >> 2U))] 
-                                                                    >> 0x1fU))) 
-                                                        << 0x00000010U) 
-                                                       | (vlSelfRef.rv32i_top__DOT__dmem
-                                                          [
-                                                          (0x00001fffU 
-                                                           & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                              >> 2U))] 
-                                                          >> 0x10U))
-                                                       : 
-                                                      (((- (IData)(
-                                                                   (1U 
-                                                                    & (vlSelfRef.rv32i_top__DOT__dmem
-                                                                       [
-                                                                       (0x00001fffU 
-                                                                        & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                           >> 2U))] 
-                                                                       >> 0x0fU)))) 
-                                                        << 0x00000010U) 
-                                                       | (0x0000ffffU 
-                                                          & vlSelfRef.rv32i_top__DOT__dmem
-                                                          [
-                                                          (0x00001fffU 
-                                                           & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                              >> 2U))])))
-                                                      : 
-                                                     ((2U 
-                                                       & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                       ? 
-                                                      ((1U 
-                                                        & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                        ? 
-                                                       (((- (IData)(
-                                                                    (vlSelfRef.rv32i_top__DOT__dmem
-                                                                     [
-                                                                     (0x00001fffU 
-                                                                      & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                         >> 2U))] 
-                                                                     >> 0x1fU))) 
-                                                         << 8U) 
-                                                        | (vlSelfRef.rv32i_top__DOT__dmem
-                                                           [
-                                                           (0x00001fffU 
-                                                            & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                               >> 2U))] 
-                                                           >> 0x18U))
-                                                        : 
-                                                       (((- (IData)(
-                                                                    (1U 
-                                                                     & (vlSelfRef.rv32i_top__DOT__dmem
-                                                                        [
-                                                                        (0x00001fffU 
-                                                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                            >> 2U))] 
-                                                                        >> 0x17U)))) 
-                                                         << 8U) 
-                                                        | (0x000000ffU 
-                                                           & (vlSelfRef.rv32i_top__DOT__dmem
-                                                              [
-                                                              (0x00001fffU 
-                                                               & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                  >> 2U))] 
-                                                              >> 0x10U))))
-                                                       : 
-                                                      ((1U 
-                                                        & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
-                                                        ? 
-                                                       (((- (IData)(
-                                                                    (1U 
-                                                                     & (vlSelfRef.rv32i_top__DOT__dmem
-                                                                        [
-                                                                        (0x00001fffU 
-                                                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                            >> 2U))] 
-                                                                        >> 0x0fU)))) 
-                                                         << 8U) 
-                                                        | (0x000000ffU 
-                                                           & (vlSelfRef.rv32i_top__DOT__dmem
-                                                              [
-                                                              (0x00001fffU 
-                                                               & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                  >> 2U))] 
-                                                              >> 8U)))
-                                                        : 
-                                                       (((- (IData)(
-                                                                    (1U 
-                                                                     & (vlSelfRef.rv32i_top__DOT__dmem
-                                                                        [
-                                                                        (0x00001fffU 
-                                                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                                            >> 2U))] 
-                                                                        >> 7U)))) 
-                                                         << 8U) 
-                                                        | (0x000000ffU 
-                                                           & vlSelfRef.rv32i_top__DOT__dmem
-                                                           [
-                                                           (0x00001fffU 
-                                                            & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
-                                                               >> 2U))])))))));
+        if ((4U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
+            if ((2U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
+                vlSelfRef.rv32i_top__DOT__mem_rdata_out = 0U;
+            } else if ((1U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
+                rv32i_top__DOT__mem_stage__DOT__loaded_data 
+                    = ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                        ? (vlSelfRef.rv32i_top__DOT__dmem
+                           [(0x00001fffU & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                            >> 2U))] 
+                           >> 0x10U) : (0x0000ffffU 
+                                        & vlSelfRef.rv32i_top__DOT__dmem
+                                        [(0x00001fffU 
+                                          & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                             >> 2U))]));
+                vlSelfRef.rv32i_top__DOT__mem_rdata_out 
+                    = rv32i_top__DOT__mem_stage__DOT__loaded_data;
+            } else {
+                rv32i_top__DOT__mem_stage__DOT__loaded_data 
+                    = ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                        ? ((1U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                            ? (vlSelfRef.rv32i_top__DOT__dmem
+                               [(0x00001fffU & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                >> 2U))] 
+                               >> 0x18U) : (0x000000ffU 
+                                            & (vlSelfRef.rv32i_top__DOT__dmem
+                                               [(0x00001fffU 
+                                                 & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                    >> 2U))] 
+                                               >> 0x10U)))
+                        : ((1U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                            ? (0x000000ffU & (vlSelfRef.rv32i_top__DOT__dmem
+                                              [(0x00001fffU 
+                                                & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                   >> 2U))] 
+                                              >> 8U))
+                            : (0x000000ffU & vlSelfRef.rv32i_top__DOT__dmem
+                               [(0x00001fffU & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                >> 2U))])));
+                vlSelfRef.rv32i_top__DOT__mem_rdata_out 
+                    = rv32i_top__DOT__mem_stage__DOT__loaded_data;
+            }
+        } else if ((2U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
+            vlSelfRef.rv32i_top__DOT__mem_rdata_out 
+                = ((1U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))
+                    ? 0U : vlSelfRef.rv32i_top__DOT__dmem
+                   [(0x00001fffU & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                    >> 2U))]);
+        } else if ((1U & (IData)(vlSelfRef.rv32i_top__DOT__ex_mem_funct3))) {
+            rv32i_top__DOT__mem_stage__DOT__loaded_data 
+                = ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                    ? (((- (IData)((vlSelfRef.rv32i_top__DOT__dmem
+                                    [(0x00001fffU & 
+                                      (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                       >> 2U))] >> 0x1fU))) 
+                        << 0x00000010U) | (vlSelfRef.rv32i_top__DOT__dmem
+                                           [(0x00001fffU 
+                                             & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                >> 2U))] 
+                                           >> 0x10U))
+                    : (((- (IData)((1U & (vlSelfRef.rv32i_top__DOT__dmem
+                                          [(0x00001fffU 
+                                            & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                               >> 2U))] 
+                                          >> 0x0fU)))) 
+                        << 0x00000010U) | (0x0000ffffU 
+                                           & vlSelfRef.rv32i_top__DOT__dmem
+                                           [(0x00001fffU 
+                                             & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                >> 2U))])));
+            vlSelfRef.rv32i_top__DOT__mem_rdata_out 
+                = rv32i_top__DOT__mem_stage__DOT__loaded_data;
+        } else {
+            rv32i_top__DOT__mem_stage__DOT__loaded_data 
+                = ((2U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                    ? ((1U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                        ? (((- (IData)((vlSelfRef.rv32i_top__DOT__dmem
+                                        [(0x00001fffU 
+                                          & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                             >> 2U))] 
+                                        >> 0x1fU))) 
+                            << 8U) | (vlSelfRef.rv32i_top__DOT__dmem
+                                      [(0x00001fffU 
+                                        & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                           >> 2U))] 
+                                      >> 0x18U)) : 
+                       (((- (IData)((1U & (vlSelfRef.rv32i_top__DOT__dmem
+                                           [(0x00001fffU 
+                                             & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                >> 2U))] 
+                                           >> 0x17U)))) 
+                         << 8U) | (0x000000ffU & (vlSelfRef.rv32i_top__DOT__dmem
+                                                  [
+                                                  (0x00001fffU 
+                                                   & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                      >> 2U))] 
+                                                  >> 0x10U))))
+                    : ((1U & (IData)(rv32i_top__DOT__mem_stage__DOT__byte_off))
+                        ? (((- (IData)((1U & (vlSelfRef.rv32i_top__DOT__dmem
+                                              [(0x00001fffU 
+                                                & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                   >> 2U))] 
+                                              >> 0x0fU)))) 
+                            << 8U) | (0x000000ffU & 
+                                      (vlSelfRef.rv32i_top__DOT__dmem
+                                       [(0x00001fffU 
+                                         & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                            >> 2U))] 
+                                       >> 8U))) : (
+                                                   ((- (IData)(
+                                                               (1U 
+                                                                & (vlSelfRef.rv32i_top__DOT__dmem
+                                                                   [
+                                                                   (0x00001fffU 
+                                                                    & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                                       >> 2U))] 
+                                                                   >> 7U)))) 
+                                                    << 8U) 
+                                                   | (0x000000ffU 
+                                                      & vlSelfRef.rv32i_top__DOT__dmem
+                                                      [
+                                                      (0x00001fffU 
+                                                       & (vlSelfRef.rv32i_top__DOT__ex_mem_alu_result 
+                                                          >> 2U))]))));
+            vlSelfRef.rv32i_top__DOT__mem_rdata_out 
+                = rv32i_top__DOT__mem_stage__DOT__loaded_data;
+        }
     }
 }
 

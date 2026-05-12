@@ -45,12 +45,29 @@ output logic        mem_write_out
 output logic [31:0] imm_out
 
 Behavior:
+- alu_srcA mux: 0 -> opA_pre=rs1_data, 1 -> opA_pre=pc_in
+- alu_srcB mux: 2'b00 -> opB_pre=rs2_data, 2'b01 -> opB_pre=imm, 2'b10 -> opB_pre=32'd4
+- forward_a mux: 2'b10 -> opA_fwd=ex_mem_alu_result, 2'b01 -> opA_fwd=wb_data, default -> opA_fwd=opA_pre
+- forward_b mux: 2'b10 -> opB_fwd=ex_mem_alu_result, 2'b01 -> opB_fwd=wb_data, default -> opB_fwd=opB_pre
+- forward_s mux: 2'b10 -> store_data_fwd=ex_mem_alu_result, 2'b01 -> store_data_fwd=wb_data, default -> store_data_fwd=store_data
 - ALU instantiation:
     rv32i_alu alu_inst (.operand_a(opA_fwd), .operand_b(opB_fwd), .alu_op(alu_op), .alu_result(alu_result));
+- Branch comparison on opA_fwd and opB_fwd using funct3: BEQ=000, BNE=001, BLT=100, BGE=101, BLTU=110, BGEU=111
+- Only evaluate branch_condition when branch=1, otherwise branch_condition=0
+- branch_taken = branch & branch_condition
+- jal_target = pc_in + imm
+- jalr_target = (opA_fwd + imm) & ~32'h1
+- branch_target = pc_in + imm
+- Redirect logic using if/else (NOT unique case):
+    if (jump && opcode == 7'b1100111): redirect_en=1, redirect_pc=jalr_target
+    else if (jump):                    redirect_en=1, redirect_pc=jal_target
+    else if (branch_taken):            redirect_en=1, redirect_pc=branch_target
+    else:                              redirect_en=0
+- pc_plus4_out = pc_plus4_in
+- imm_out = imm
+- Pass through reg_write, rd, wb_sel, mem_read, mem_write unchanged
 
 Coding constraints:
-- Do not generate opcode parameters or decoding logic — assume alu_op is pre-decoded and provided as input
-- Do not generate unused logic or signals.
 - Use unique case for alu_srcA, alu_srcB, forward_a, forward_b, forward_s, branch funct3
 - Use if/else (NOT unique case) for redirect logic
 - All logic in always_comb except ALU instantiation
@@ -103,12 +120,29 @@ output logic        mem_write_out
 output logic [31:0] imm_out
 
 Behavior:
+- alu_srcA mux: 0 -> opA_pre=rs1_data, 1 -> opA_pre=pc_in
+- alu_srcB mux: 2'b00 -> opB_pre=rs2_data, 2'b01 -> opB_pre=imm, 2'b10 -> opB_pre=32'd4
+- forward_a mux: 2'b10 -> opA_fwd=ex_mem_alu_result, 2'b01 -> opA_fwd=wb_data, default -> opA_fwd=opA_pre
+- forward_b mux: 2'b10 -> opB_fwd=ex_mem_alu_result, 2'b01 -> opB_fwd=wb_data, default -> opB_fwd=opB_pre
+- forward_s mux: 2'b10 -> store_data_fwd=ex_mem_alu_result, 2'b01 -> store_data_fwd=wb_data, default -> store_data_fwd=store_data
 - ALU instantiation:
     rv32i_alu alu_inst (.operand_a(opA_fwd), .operand_b(opB_fwd), .alu_op(alu_op), .alu_result(alu_result));
+- Branch comparison on opA_fwd and opB_fwd using funct3: BEQ=000, BNE=001, BLT=100, BGE=101, BLTU=110, BGEU=111
+- Only evaluate branch_condition when branch=1, otherwise branch_condition=0
+- branch_taken = branch & branch_condition
+- jal_target = pc_in + imm
+- jalr_target = (opA_fwd + imm) & ~32'h1
+- branch_target = pc_in + imm
+- Redirect logic using if/else (NOT unique case):
+    if (jump && opcode == 7'b1100111): redirect_en=1, redirect_pc=jalr_target
+    else if (jump):                    redirect_en=1, redirect_pc=jal_target
+    else if (branch_taken):            redirect_en=1, redirect_pc=branch_target
+    else:                              redirect_en=0
+- pc_plus4_out = pc_plus4_in
+- imm_out = imm
+- Pass through reg_write, rd, wb_sel, mem_read, mem_write unchanged
 
 Coding constraints:
-- Do not generate opcode parameters or decoding logic — assume alu_op is pre-decoded and provided as input
-- Do not generate unused logic or signals.
 - Use unique case for alu_srcA, alu_srcB, forward_a, forward_b, forward_s, branch funct3
 - Use if/else (NOT unique case) for redirect logic
 - All logic in always_comb except ALU instantiation

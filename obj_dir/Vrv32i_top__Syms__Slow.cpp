@@ -11,7 +11,7 @@ Vrv32i_top__Syms::Vrv32i_top__Syms(VerilatedContext* contextp, const char* namep
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(294);
+    Verilated::stackCheck(310);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-12);

@@ -29,15 +29,15 @@ module rv32i_id_stage (
 );
 
     // Opcode definitions
-    localparam logic [6:0] OP_R_TYPE   = 7'b0110011;  // ADD, SUB, AND, OR, XOR, SLL, SRL, SRA
-    localparam logic [6:0] OP_I_TYPE   = 7'b0010011;  // ADDI, ANDI, ORI, XORI, SLTI, SLTIU, SLLI, SRLI, SRAI
-    localparam logic [6:0] OP_LOAD     = 7'b0000011;  // LW, LH, LB, LHU, LBU
-    localparam logic [6:0] OP_STORE    = 7'b0100011;  // SW, SH, SB
-    localparam logic [6:0] OP_BRANCH   = 7'b1100011;  // BEQ, BNE, BLT, BGE, BLTU, BGEU
-    localparam logic [6:0] OP_JAL      = 7'b1101111;  // JAL
-    localparam logic [6:0] OP_JALR     = 7'b1100111;  // JALR
-    localparam logic [6:0] OP_LUI      = 7'b0110111;  // LUI
-    localparam logic [6:0] OP_AUIPC    = 7'b0010111;  // AUIPC
+    localparam logic [6:0] OP_R_TYPE    = 7'b0110011;  // ADD, SUB, AND, OR, XOR, SLL, SRL, SRA
+    localparam logic [6:0] OP_I_TYPE    = 7'b0010011;  // ADDI, ANDI, ORI, XORI, SLTI, SLTIU, SLLI, SRLI, SRAI
+    localparam logic [6:0] OP_LOAD      = 7'b0000011;  // LW, LH, LB, LHU, LBU
+    localparam logic [6:0] OP_STORE     = 7'b0100011;  // SW, SH, SB
+    localparam logic [6:0] OP_BRANCH    = 7'b1100011;  // BEQ, BNE, BLT, BGE, BLTU, BGEU
+    localparam logic [6:0] OP_JAL       = 7'b1101111;  // JAL
+    localparam logic [6:0] OP_JALR      = 7'b1100111;  // JALR
+    localparam logic [6:0] OP_LUI       = 7'b0110111;  // LUI
+    localparam logic [6:0] OP_AUIPC     = 7'b0010111;  // AUIPC
 
     // Writeback selection encoding
     localparam logic [1:0] WB_ALU   = 2'b00;
@@ -46,11 +46,7 @@ module rv32i_id_stage (
     localparam logic [1:0] WB_IMM_U = 2'b11;
 
     // Immediate generation (combinational)
-    logic [31:0] imm_i;
-    logic [31:0] imm_s;
-    logic [31:0] imm_b;
-    logic [31:0] imm_u;
-    logic [31:0] imm_j;
+    logic [31:0] imm_i, imm_s, imm_b, imm_u, imm_j;
 
     // I-type immediate: sign-extend bits [31:20]
     assign imm_i = {{20{instr[31]}}, instr[31:20]};
@@ -67,7 +63,7 @@ module rv32i_id_stage (
     // J-type immediate: sign-extend bits [31], [19:12], [20], [30:21]
     assign imm_j = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'b0};
 
-    // Instruction field extraction (combinational)
+    // Instruction field extraction
     always_comb begin
         // Safe defaults for all outputs
         opcode      = 7'b0;
@@ -100,13 +96,13 @@ module rv32i_id_stage (
         rs2    = instr[24:20];
         funct7 = instr[31:25];
 
-        // Pass through data and control
-        rs1_data_out  = rs1_data_in;
-        rs2_data_out  = rs2_data_in;
-        pc_out        = pc_in;
-        pc_plus4_out  = pc_plus4_in;
-        alu_op_out    = alu_op_in;
-        store_data    = rs2_data_in;
+        // Pass through signals
+        pc_out       = pc_in;
+        pc_plus4_out = pc_plus4_in;
+        rs1_data_out = rs1_data_in;
+        rs2_data_out = rs2_data_in;
+        store_data   = rs2_data_in;
+        alu_op_out   = alu_op_in;
 
         // Decode instruction and set control signals
         unique case (opcode)
@@ -158,7 +154,7 @@ module rv32i_id_stage (
                 jump      = 1'b0;
                 alu_srcA  = 1'b0;
                 alu_srcB  = 2'b01;
-                wb_sel    = 2'b00;
+                wb_sel    = WB_ALU;
                 imm       = imm_s;
             end
 
@@ -171,7 +167,7 @@ module rv32i_id_stage (
                 jump      = 1'b0;
                 alu_srcA  = 1'b0;
                 alu_srcB  = 2'b00;
-                wb_sel    = 2'b00;
+                wb_sel    = WB_ALU;
                 imm       = imm_b;
             end
 
@@ -228,7 +224,7 @@ module rv32i_id_stage (
             end
 
             default: begin
-                // Unknown opcode - safe defaults already set
+                // Unknown opcode: set safe defaults (already set above)
                 reg_write = 1'b0;
                 mem_read  = 1'b0;
                 mem_write = 1'b0;
@@ -236,7 +232,7 @@ module rv32i_id_stage (
                 jump      = 1'b0;
                 alu_srcA  = 1'b0;
                 alu_srcB  = 2'b0;
-                wb_sel    = 2'b0;
+                wb_sel    = WB_ALU;
                 imm       = 32'b0;
             end
         endcase

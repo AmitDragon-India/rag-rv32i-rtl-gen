@@ -46,7 +46,7 @@ module rv32i_if_stage #(
     assign pc_out = pc;
 
     // Instruction fetch from memory (combinational)
-    // Word-addressed: use pc[clog2(MEM_DEPTH)+1:2] as index
+    // Word address = pc[clog2(MEM_DEPTH)+1:2]
     assign instr = flush ? 32'h00000013 : imem[pc[$clog2(MEM_DEPTH)+1:2]];
 
 endmodule

@@ -23,6 +23,13 @@ output logic        reg_write_out
 output logic [4:0]  rd_out
 output logic [1:0]  wb_sel_out
 
+Behavior:
+- dmem_addr = alu_result
+- Use byte_off = alu_result[1:0] for sub-word byte addressing within a 32-bit aligned word
+- On mem_write: generate dmem_byte_en and dmem_wdata based on funct3 and byte_off for SB/SH/SW
+- On mem_read: sign/zero extend dmem_rdata based on funct3 and byte_off for LB/LBU/LH/LHU/LW
+- Pass through reg_write, rd_in, pc_plus4_in, imm_u_in, alu_result, wb_sel unchanged to outputs
+
 Coding constraints:
 - Use always_comb only
 - Use unique case for store funct3 and load funct3
@@ -56,6 +63,13 @@ output logic [31:0] pc_plus4_out, imm_u_out, mem_rdata_out, alu_result_out
 output logic        reg_write_out
 output logic [4:0]  rd_out
 output logic [1:0]  wb_sel_out
+
+Behavior:
+- dmem_addr = alu_result
+- Use byte_off = alu_result[1:0] for sub-word byte addressing within a 32-bit aligned word
+- On mem_write: generate dmem_byte_en and dmem_wdata based on funct3 and byte_off for SB/SH/SW
+- On mem_read: sign/zero extend dmem_rdata based on funct3 and byte_off for LB/LBU/LH/LHU/LW
+- Pass through reg_write, rd_in, pc_plus4_in, imm_u_in, alu_result, wb_sel unchanged to outputs
 
 Coding constraints:
 - Use always_comb only

@@ -18,6 +18,14 @@ input  logic [4:0]  rd_addr
 input  logic [31:0] rd_data
 input  logic        reg_write
 
+Behavior:
+- 32 x 32-bit registers
+- x0 hardwired to zero — reads always return 0, writes suppressed
+- Reads must use always_comb (NOT assign) to support write-before-read bypass
+- Write-before-read bypass: if reg_write=1 and rd_addr matches rs1_addr or rs2_addr, the read output must return rd_data directly (not stale register value)
+- Synchronous write on posedge clk with async active-low rst_n reset
+- Write only when reg_write=1 AND rd_addr != 5'b0
+- Reset initializes all registers to 0
 
 
 PROMPT:
@@ -40,6 +48,14 @@ input  logic [4:0]  rd_addr
 input  logic [31:0] rd_data
 input  logic        reg_write
 
+Behavior:
+- 32 x 32-bit registers
+- x0 hardwired to zero — reads always return 0, writes suppressed
+- Reads must use always_comb (NOT assign) to support write-before-read bypass
+- Write-before-read bypass: if reg_write=1 and rd_addr matches rs1_addr or rs2_addr, the read output must return rd_data directly (not stale register value)
+- Synchronous write on posedge clk with async active-low rst_n reset
+- Write only when reg_write=1 AND rd_addr != 5'b0
+- Reset initializes all registers to 0
 
 
 Retrieved context:

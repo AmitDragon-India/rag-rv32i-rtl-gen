@@ -22,18 +22,18 @@ module rv32i_hazard_unit (
     // Compute load-use hazard condition
     logic load_use_hazard;
     
-    assign load_use_hazard = id_ex_mem_read & (id_ex_rd != 5'b0) & 
+    assign load_use_hazard = id_ex_mem_read & (id_ex_rd != 5'b00000) & 
                              ((id_ex_rd == rs1) | (id_ex_rd == rs2));
     
     // Combinational hazard control logic
     always_comb begin
-        // Default all outputs to 0
+        // Default: no stall, no flush
         stall_pc    = 1'b0;
         stall_if_id = 1'b0;
         flush_if_id = 1'b0;
         flush_id_ex = 1'b0;
         
-        // Priority: load_use_hazard takes precedence over redirect_en
+        // Priority: load-use hazard takes precedence over redirect
         if (load_use_hazard) begin
             stall_pc    = 1'b1;
             stall_if_id = 1'b1;

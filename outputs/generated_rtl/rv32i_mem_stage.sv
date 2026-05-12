@@ -24,7 +24,7 @@ module rv32i_mem_stage (
     output logic [1:0]  wb_sel_out
 );
 
-    // funct3 encoding for load/store instructions
+    // funct3 constants for load/store instructions
     localparam FUNCT3_LB  = 3'b000;
     localparam FUNCT3_LH  = 3'b001;
     localparam FUNCT3_LW  = 3'b010;
@@ -34,7 +34,8 @@ module rv32i_mem_stage (
     localparam FUNCT3_SH  = 3'b001;
     localparam FUNCT3_SW  = 3'b010;
 
-    logic [1:0] byte_off;
+    logic [1:0]  byte_off;
+    logic [31:0] loaded_data;
 
     always_comb begin
         // Safe defaults for all outputs
@@ -44,6 +45,9 @@ module rv32i_mem_stage (
         dmem_we        = 1'b0;
         dmem_re        = 1'b0;
         mem_rdata_out  = 32'b0;
+        loaded_data    = 32'b0;
+
+        // Pass-through signals
         pc_plus4_out   = pc_plus4_in;
         imm_u_out      = imm_u_in;
         alu_result_out = alu_result;
@@ -55,26 +59,27 @@ module rv32i_mem_stage (
         dmem_addr = alu_result;
         byte_off  = alu_result[1:0];
 
-        // Handle store operations
+        // Store operations
         if (mem_write) begin
             dmem_we = 1'b1;
             unique case (funct3)
                 FUNCT3_SB: begin
-                    // Store byte: shift based on byte_off
+                    // Store byte at byte_off position
                     dmem_byte_en = 4'b0001 << byte_off;
                     dmem_wdata   = store_data << (8 * byte_off);
                 end
                 FUNCT3_SH: begin
-                    // Store halfword: shift based on byte_off[1]
+                    // Store halfword
                     if (byte_off[1]) begin
                         dmem_byte_en = 4'b1100;
+                        dmem_wdata   = store_data << 16;
                     end else begin
                         dmem_byte_en = 4'b0011;
+                        dmem_wdata   = store_data;
                     end
-                    dmem_wdata = store_data << (8 * byte_off);
                 end
                 FUNCT3_SW: begin
-                    // Store word: full 32-bit
+                    // Store word
                     dmem_byte_en = 4'b1111;
                     dmem_wdata   = store_data;
                 end
@@ -85,50 +90,50 @@ module rv32i_mem_stage (
             endcase
         end
 
-        // Handle load operations
+        // Load operations
         if (mem_read) begin
             dmem_re = 1'b1;
             unique case (funct3)
                 FUNCT3_LB: begin
                     // Load byte with sign extension
                     unique case (byte_off)
-                        2'b00: mem_rdata_out = {{24{dmem_rdata[7]}},  dmem_rdata[7:0]};
-                        2'b01: mem_rdata_out = {{24{dmem_rdata[15]}}, dmem_rdata[15:8]};
-                        2'b10: mem_rdata_out = {{24{dmem_rdata[23]}}, dmem_rdata[23:16]};
-                        2'b11: mem_rdata_out = {{24{dmem_rdata[31]}}, dmem_rdata[31:24]};
+                        2'b00: loaded_data = {{24{dmem_rdata[7]}},  dmem_rdata[7:0]};
+                        2'b01: loaded_data = {{24{dmem_rdata[15]}}, dmem_rdata[15:8]};
+                        2'b10: loaded_data = {{24{dmem_rdata[23]}}, dmem_rdata[23:16]};
+                        2'b11: loaded_data = {{24{dmem_rdata[31]}}, dmem_rdata[31:24]};
                     endcase
+                    mem_rdata_out = loaded_data;
                 end
                 FUNCT3_LBU: begin
                     // Load byte with zero extension
                     unique case (byte_off)
-                        2'b00: mem_rdata_out = {24'b0, dmem_rdata[7:0]};
-                        2'b01: mem_rdata_out = {24'b0, dmem_rdata[15:8]};
-                        2'b10: mem_rdata_out = {24'b0, dmem_rdata[23:16]};
-                        2'b11: mem_rdata_out = {24'b0, dmem_rdata[31:24]};
+                        2'b00: loaded_data = {24'b0, dmem_rdata[7:0]};
+                        2'b01: loaded_data = {24'b0, dmem_rdata[15:8]};
+                        2'b10: loaded_data = {24'b0, dmem_rdata[23:16]};
+                        2'b11: loaded_data = {24'b0, dmem_rdata[31:24]};
                     endcase
+                    mem_rdata_out = loaded_data;
                 end
                 FUNCT3_LH: begin
                     // Load halfword with sign extension
                     if (byte_off[1]) begin
-                        // Upper halfword
-                        mem_rdata_out = {{16{dmem_rdata[31]}}, dmem_rdata[31:16]};
+                        loaded_data = {{16{dmem_rdata[31]}}, dmem_rdata[31:16]};
                     end else begin
-                        // Lower halfword
-                        mem_rdata_out = {{16{dmem_rdata[15]}}, dmem_rdata[15:0]};
+                        loaded_data = {{16{dmem_rdata[15]}}, dmem_rdata[15:0]};
                     end
+                    mem_rdata_out = loaded_data;
                 end
                 FUNCT3_LHU: begin
                     // Load halfword with zero extension
                     if (byte_off[1]) begin
-                        // Upper halfword
-                        mem_rdata_out = {16'b0, dmem_rdata[31:16]};
+                        loaded_data = {16'b0, dmem_rdata[31:16]};
                     end else begin
-                        // Lower halfword
-                        mem_rdata_out = {16'b0, dmem_rdata[15:0]};
+                        loaded_data = {16'b0, dmem_rdata[15:0]};
                     end
+                    mem_rdata_out = loaded_data;
                 end
                 FUNCT3_LW: begin
-                    // Load word: full 32-bit
+                    // Load word
                     mem_rdata_out = dmem_rdata;
                 end
                 default: begin

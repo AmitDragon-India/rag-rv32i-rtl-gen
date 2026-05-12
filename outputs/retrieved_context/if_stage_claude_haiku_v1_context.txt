@@ -22,10 +22,15 @@ parameter int    MEM_DEPTH = 8192
 parameter string MEM_FILE  = ""
 
 Behavior:
+- PC register with async active-low reset, stall enable
+- pc_plus4 = pc + 32'd4
+- Instruction memory: array of MEM_DEPTH 32-bit words
+- Word-addressed using exact index: imem[pc[$clog2(MEM_DEPTH)+1:2]]
 - Memory loading in initial block:
     if MEM_FILE != "": $readmemh(MEM_FILE, imem)
     else: use $value$plusargs("load=%s", load_file) to load at runtime
-
+- On flush: output NOP (32'h00000013)
+- On stall: hold PC else update to pc_next
 
 Coding constraints:
 - Use always_ff for sequential PC update.
@@ -57,10 +62,15 @@ parameter int    MEM_DEPTH = 8192
 parameter string MEM_FILE  = ""
 
 Behavior:
+- PC register with async active-low reset, stall enable
+- pc_plus4 = pc + 32'd4
+- Instruction memory: array of MEM_DEPTH 32-bit words
+- Word-addressed using exact index: imem[pc[$clog2(MEM_DEPTH)+1:2]]
 - Memory loading in initial block:
     if MEM_FILE != "": $readmemh(MEM_FILE, imem)
     else: use $value$plusargs("load=%s", load_file) to load at runtime
-
+- On flush: output NOP (32'h00000013)
+- On stall: hold PC else update to pc_next
 
 Coding constraints:
 - Use always_ff for sequential PC update.

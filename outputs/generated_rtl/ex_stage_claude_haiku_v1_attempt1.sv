@@ -49,17 +49,17 @@ module rv32i_ex_stage (
     // alu_srcA mux
     always_comb begin
         unique case (alu_srcA)
-            1'b0:    opA_pre = rs1_data;
-            default: opA_pre = pc_in;
+            1'b0: opA_pre = rs1_data;
+            1'b1: opA_pre = pc_in;
         endcase
     end
 
     // alu_srcB mux
     always_comb begin
         unique case (alu_srcB)
-            2'b00:   opB_pre = rs2_data;
-            2'b01:   opB_pre = imm;
-            2'b10:   opB_pre = 32'd4;
+            2'b00: opB_pre = rs2_data;
+            2'b01: opB_pre = imm;
+            2'b10: opB_pre = 32'd4;
             default: opB_pre = 32'd0;
         endcase
     end
@@ -67,8 +67,8 @@ module rv32i_ex_stage (
     // forward_a mux
     always_comb begin
         unique case (forward_a)
-            2'b10:   opA_fwd = ex_mem_alu_result;
-            2'b01:   opA_fwd = wb_data;
+            2'b10: opA_fwd = ex_mem_alu_result;
+            2'b01: opA_fwd = wb_data;
             default: opA_fwd = opA_pre;
         endcase
     end
@@ -76,8 +76,8 @@ module rv32i_ex_stage (
     // forward_b mux
     always_comb begin
         unique case (forward_b)
-            2'b10:   opB_fwd = ex_mem_alu_result;
-            2'b01:   opB_fwd = wb_data;
+            2'b10: opB_fwd = ex_mem_alu_result;
+            2'b01: opB_fwd = wb_data;
             default: opB_fwd = opB_pre;
         endcase
     end
@@ -85,8 +85,8 @@ module rv32i_ex_stage (
     // forward_s mux
     always_comb begin
         unique case (forward_s)
-            2'b10:   store_data_fwd = ex_mem_alu_result;
-            2'b01:   store_data_fwd = wb_data;
+            2'b10: store_data_fwd = ex_mem_alu_result;
+            2'b01: store_data_fwd = wb_data;
             default: store_data_fwd = store_data;
         endcase
     end
@@ -105,21 +105,21 @@ module rv32i_ex_stage (
         
         if (branch) begin
             unique case (funct3)
-                3'b000:  branch_condition = (opA_fwd == opB_fwd);           // BEQ
-                3'b001:  branch_condition = (opA_fwd != opB_fwd);           // BNE
-                3'b100:  branch_condition = ($signed(opA_fwd) < $signed(opB_fwd)); // BLT
-                3'b101:  branch_condition = ($signed(opA_fwd) >= $signed(opB_fwd)); // BGE
-                3'b110:  branch_condition = (opA_fwd < opB_fwd);            // BLTU
-                3'b111:  branch_condition = (opA_fwd >= opB_fwd);           // BGEU
+                3'b000: branch_condition = (opA_fwd == opB_fwd);           // BEQ
+                3'b001: branch_condition = (opA_fwd != opB_fwd);           // BNE
+                3'b100: branch_condition = ($signed(opA_fwd) < $signed(opB_fwd)); // BLT
+                3'b101: branch_condition = ($signed(opA_fwd) >= $signed(opB_fwd)); // BGE
+                3'b110: branch_condition = (opA_fwd < opB_fwd);            // BLTU
+                3'b111: branch_condition = (opA_fwd >= opB_fwd);           // BGEU
                 default: branch_condition = 1'b0;
             endcase
         end
     end
 
-    // Branch taken
+    // branch_taken
     assign branch_taken = branch & branch_condition;
 
-    // Target calculations
+    // Target address calculations
     assign jal_target = pc_in + imm;
     assign jalr_target = (opA_fwd + imm) & ~32'h1;
     assign branch_target = pc_in + imm;

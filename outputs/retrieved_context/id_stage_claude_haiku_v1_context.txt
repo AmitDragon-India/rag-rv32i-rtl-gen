@@ -48,6 +48,22 @@ output logic [1:0]  alu_srcB
 output logic [1:0]  wb_sel
 output logic [3:0]  alu_op_out
 
+Behavior:
+- Use localparam logic [6:0] for all opcode definitions
+- Use localparam logic [1:0] for wb_sel encoding: WB_ALU=00, WB_MEM=01, WB_PC4=10, WB_IMM_U=11
+- Declare imm_i, imm_s, imm_b, imm_u, imm_j as logic [31:0] with assign statements before always_comb
+- Use combinational logic only (always_comb) — no clock or reset ports
+- At start of always_comb set safe defaults: all control signals=0, imm=32'b0
+- Then extract fields: opcode=instr[6:0], rd=instr[11:7], funct3=instr[14:12], rs1=instr[19:15], rs2=instr[24:20], funct7=instr[31:25]
+- Then pass through: rs1_data_out=rs1_data_in, rs2_data_out=rs2_data_in, pc_out=pc_in, pc_plus4_out=pc_plus4_in, alu_op_out=alu_op_in, store_data=rs2_data_in
+- Use unique case(opcode) with one separate case branch per opcode
+- Take control signal values from the Control Signal Table in the retrieved architecture spec
+- Select correct immediate per opcode: R-type=32'd0, I-type=imm_i, Load=imm_i, Store=imm_s, Branch=imm_b, LUI=imm_u, AUIPC=imm_u, JAL=imm_j, JALR=imm_i
+- NEVER group multiple opcodes in the same case branch
+- NEVER use empty default — always assign all control signals in default case
+- NEVER use assign for control signals — only always_comb
+- Do not use funct3 or funct7 for immediate selection — only opcode determines immediate type
+
 
 PROMPT:
 You are an expert RTL generation assistant specializing in RV32I processor design.
@@ -98,6 +114,22 @@ output logic        alu_srcA
 output logic [1:0]  alu_srcB
 output logic [1:0]  wb_sel
 output logic [3:0]  alu_op_out
+
+Behavior:
+- Use localparam logic [6:0] for all opcode definitions
+- Use localparam logic [1:0] for wb_sel encoding: WB_ALU=00, WB_MEM=01, WB_PC4=10, WB_IMM_U=11
+- Declare imm_i, imm_s, imm_b, imm_u, imm_j as logic [31:0] with assign statements before always_comb
+- Use combinational logic only (always_comb) — no clock or reset ports
+- At start of always_comb set safe defaults: all control signals=0, imm=32'b0
+- Then extract fields: opcode=instr[6:0], rd=instr[11:7], funct3=instr[14:12], rs1=instr[19:15], rs2=instr[24:20], funct7=instr[31:25]
+- Then pass through: rs1_data_out=rs1_data_in, rs2_data_out=rs2_data_in, pc_out=pc_in, pc_plus4_out=pc_plus4_in, alu_op_out=alu_op_in, store_data=rs2_data_in
+- Use unique case(opcode) with one separate case branch per opcode
+- Take control signal values from the Control Signal Table in the retrieved architecture spec
+- Select correct immediate per opcode: R-type=32'd0, I-type=imm_i, Load=imm_i, Store=imm_s, Branch=imm_b, LUI=imm_u, AUIPC=imm_u, JAL=imm_j, JALR=imm_i
+- NEVER group multiple opcodes in the same case branch
+- NEVER use empty default — always assign all control signals in default case
+- NEVER use assign for control signals — only always_comb
+- Do not use funct3 or funct7 for immediate selection — only opcode determines immediate type
 
 
 Retrieved context:

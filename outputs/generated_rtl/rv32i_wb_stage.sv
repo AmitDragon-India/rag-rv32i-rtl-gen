@@ -16,7 +16,6 @@ module rv32i_wb_stage (
             2'b01: wb_data = mem_rdata;
             2'b10: wb_data = pc_plus4_in;
             2'b11: wb_data = imm_u_in;
-            default: wb_data = alu_result;
         endcase
     end
 

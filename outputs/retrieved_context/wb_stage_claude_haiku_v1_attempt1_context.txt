@@ -15,6 +15,11 @@ input  logic [31:0] imm_u_in
 input  logic [1:0]  wb_sel
 output logic [31:0] wb_data
 
+Behavior:
+- Implement wb_sel mux: 00-> alu_result, 01 -> mem_rdata, 10 -> pc_plus4_in, 11 -> imm_u_in
+- Use unique case for wb_sel
+- Pure combinational always_comb only
+- Default wb_data = alu_result
 
 
 PROMPT:
@@ -34,6 +39,11 @@ input  logic [31:0] imm_u_in
 input  logic [1:0]  wb_sel
 output logic [31:0] wb_data
 
+Behavior:
+- Implement wb_sel mux: 00-> alu_result, 01 -> mem_rdata, 10 -> pc_plus4_in, 11 -> imm_u_in
+- Use unique case for wb_sel
+- Pure combinational always_comb only
+- Default wb_data = alu_result
 
 
 Retrieved context:

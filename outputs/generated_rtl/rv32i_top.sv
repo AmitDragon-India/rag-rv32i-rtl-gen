@@ -56,11 +56,11 @@ module rv32i_top #(
 
     // EX stage outputs
     logic [31:0] ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out;
-
+    
     /* verilator lint_off UNUSED */
     logic        ex_branch_taken;
     /* verilator lint_on UNUSED */
-    
+
     logic        ex_redirect_en;
     logic [31:0] ex_redirect_pc;
     logic        ex_reg_write_out, ex_mem_read_out, ex_mem_write_out;
@@ -89,13 +89,13 @@ module rv32i_top #(
 
     /* verilator lint_off UNUSED */
     logic [31:0] dmem_addr;
-    /* verilator lint_on UNUSED */ 
-    
+    /* verilator lint_on UNUSED */
+
     logic [31:0] dmem_wdata, dmem_rdata;
     logic [3:0]  dmem_byte_en;
     logic        dmem_we;
-    
-    /* verilator lint_off UNUSED */
+
+    /* verilator lint_off UNUSED */ 
     logic        dmem_re;
     /* verilator lint_on UNUSED */
 

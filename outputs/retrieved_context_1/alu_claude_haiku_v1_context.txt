@@ -1,0 +1,522 @@
+TASK LABEL:
+alu_claude_haiku_v1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I ALU.
+
+Module name: rv32i_alu
+
+Interface:
+input  logic [31:0] operand_a
+input  logic [31:0] operand_b
+input  logic [3:0]  alu_op
+output logic [31:0] alu_result
+
+Use localparam for alu_op encoding.
+
+Coding constraints:
+- Pure combinational (always_comb only)
+- Default alu_result = 32'b0
+- Use unique case(alu_op)
+- Take alu_op encoding values from retrieved context
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I ALU.
+
+Module name: rv32i_alu
+
+Interface:
+input  logic [31:0] operand_a
+input  logic [31:0] operand_b
+input  logic [3:0]  alu_op
+output logic [31:0] alu_result
+
+Use localparam for alu_op encoding.
+
+Coding constraints:
+- Pure combinational (always_comb only)
+- Default alu_result = 32'b0
+- Use unique case(alu_op)
+- Take alu_op encoding values from retrieved context
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_5
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+
+[Context 2]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_22
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+### alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned
+localparam logic [3:0] ALU_SLL  = 4'b0111;
+localparam logic [3:0] ALU_SRL  = 4'b1000;
+localparam logic [3:0] ALU_SRA  = 4'b1001;
+```
+
+
+[Context 3]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_4
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibilities
+- Extract instruction fields (opcode, rd, rs1, rs2, funct3, funct7)
+- Generate immediate values (imm_i, imm_s, imm_b, imm_u, imm_j)
+- Generate high-level control signals
+- Pass `rs1_data` and `rs2_data` to EX stage
+- Select ALU operand sources (`alu_srcA`, `alu_srcB`)
+- Select writeback source (`wb_sel`)
+
+
+[Context 4]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_4
+Source: 08_alu_spec
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Behavior
+
+- Use `always_comb` with `unique case (alu_op)`
+- Default `alu_result = 32'b0` at top of always_comb
+- ADD:  `operand_a + operand_b`
+- SUB:  `operand_a - operand_b`
+- AND:  `operand_a & operand_b`
+- OR:   `operand_a | operand_b`
+- XOR:  `operand_a ^ operand_b`
+- SLT:  `($signed(operand_a) < $signed(operand_b)) ? 32'd1 : 32'd0`
+- SLTU: `(operand_a < operand_b) ? 32'd1 : 32'd0`
+- SLL:  `operand_a << operand_b[4:0]`
+- SRL:  `operand_a >> operand_b[4:0]`
+- SRA:  `$signed(operand_a) >>> operand_b[4:0]`
+
+---
+
+
+[Context 5]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_2
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed less-than
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned less-than
+localparam logic [3:0] ALU_SLL  = 4'b0111;  // logical left shift
+localparam logic [3:0] ALU_SRL  = 4'b1000;  // logical right shift
+localparam logic [3:0] ALU_SRA  = 4'b1001;  // arithmetic right shift
+```
+
+---
+
+
+[Context 6]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_7
+Source: 08_alu_spec
+
+### funct3 encoding for R-type and I-type
+
+```
+3'b000 = ADD/SUB/ADDI      (use funct7[5] for ADD vs SUB)
+3'b001 = SLL/SLLI
+3'b010 = SLT/SLTI
+3'b011 = SLTU/SLTIU
+3'b100 = XOR/XORI
+3'b101 = SRL/SRA/SRLI/SRAI (use funct7[5] for logical vs arithmetic)
+3'b110 = OR/ORI
+3'b111 = AND/ANDI
+```
+
+---
+
+
+[Context 7]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_6
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+
+[Context 8]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_8
+Source: 08_alu_spec
+
+## Common Bugs
+
+- Using `>>` instead of `>>>` for SRA — `>>` is always logical shift in SystemVerilog
+- Forgetting `$signed()` cast for SLT and SRA
+- Not masking shift amount to 5 bits — always use `operand_b[4:0]` for shifts
+- Confusing funct7[5]=0 (ADD, SRL) with funct7[5]=1 (SUB, SRA)
+
+
+[Context 9]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_3
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+
+[Context 10]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_5
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+
+[Context 11]
+Source: corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md
+Chunk ID: 06_common_rtl_bugs_and_fixes_sec_10
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_5', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_22', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+### alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned
+localparam logic [3:0] ALU_SLL  = 4'b0111;
+localparam logic [3:0] ALU_SRL  = 4'b1000;
+localparam logic [3:0] ALU_SRA  = 4'b1001;
+```
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_4', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibilities
+- Extract instruction fields (opcode, rd, rs1, rs2, funct3, funct7)
+- Generate immediate values (imm_i, imm_s, imm_b, imm_u, imm_j)
+- Generate high-level control signals
+- Pass `rs1_data` and `rs2_data` to EX stage
+- Select ALU operand sources (`alu_srcA`, `alu_srcB`)
+- Select writeback source (`wb_sel`)
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_4', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Behavior
+
+- Use `always_comb` with `unique case (alu_op)`
+- Default `alu_result = 32'b0` at top of always_comb
+- ADD:  `operand_a + operand_b`
+- SUB:  `operand_a - operand_b`
+- AND:  `operand_a & operand_b`
+- OR:   `operand_a | operand_b`
+- XOR:  `operand_a ^ operand_b`
+- SLT:  `($signed(operand_a) < $signed(operand_b)) ? 32'd1 : 32'd0`
+- SLTU: `(operand_a < operand_b) ? 32'd1 : 32'd0`
+- SLL:  `operand_a << operand_b[4:0]`
+- SRL:  `operand_a >> operand_b[4:0]`
+- SRA:  `$signed(operand_a) >>> operand_b[4:0]`
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_2', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed less-than
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned less-than
+localparam logic [3:0] ALU_SLL  = 4'b0111;  // logical left shift
+localparam logic [3:0] ALU_SRL  = 4'b1000;  // logical right shift
+localparam logic [3:0] ALU_SRA  = 4'b1001;  // arithmetic right shift
+```
+
+---
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_7', 'type': 'markdown'}
+Source: 08_alu_spec
+
+### funct3 encoding for R-type and I-type
+
+```
+3'b000 = ADD/SUB/ADDI      (use funct7[5] for ADD vs SUB)
+3'b001 = SLL/SLLI
+3'b010 = SLT/SLTI
+3'b011 = SLTU/SLTIU
+3'b100 = XOR/XORI
+3'b101 = SRL/SRA/SRLI/SRAI (use funct7[5] for logical vs arithmetic)
+3'b110 = OR/ORI
+3'b111 = AND/ANDI
+```
+
+---
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_6', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_8', 'type': 'markdown'}
+Source: 08_alu_spec
+
+## Common Bugs
+
+- Using `>>` instead of `>>>` for SRA — `>>` is always logical shift in SystemVerilog
+- Forgetting `$signed()` cast for SLT and SRA
+- Not masking shift amount to 5 bits — always use `operand_b[4:0]` for shifts
+- Confusing funct7[5]=0 (ADD, SRL) with funct7[5]=1 (SUB, SRA)
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_3', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_5', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md', 'chunk_id': '06_common_rtl_bugs_and_fixes_sec_10', 'type': 'markdown'}
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+

@@ -1,0 +1,708 @@
+TASK LABEL:
+wb_stage_claude_haiku_v1_attempt1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I Writeback (WB) stage.
+
+Module name: rv32i_wb_stage
+
+Interface:
+input  logic [31:0] alu_result
+input  logic [31:0] mem_rdata
+input  logic [31:0] pc_plus4_in
+input  logic [31:0] imm_u_in
+input  logic [1:0]  wb_sel
+output logic [31:0] wb_data
+
+Coding constraints:
+- Use unique case for wb_sel
+- Default wb_data = alu_result
+- Pure combinational always_comb only
+- Take wb_sel encoding from retrieved context
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I Writeback (WB) stage.
+
+Module name: rv32i_wb_stage
+
+Interface:
+input  logic [31:0] alu_result
+input  logic [31:0] mem_rdata
+input  logic [31:0] pc_plus4_in
+input  logic [31:0] imm_u_in
+input  logic [1:0]  wb_sel
+output logic [31:0] wb_data
+
+Coding constraints:
+- Use unique case for wb_sel
+- Default wb_data = alu_result
+- Pure combinational always_comb only
+- Take wb_sel encoding from retrieved context
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_11
+Source: 04_architecture
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+
+## Writeback Selection (wb_sel)
+
+- `2'b00` -> ALU result
+- `2'b01` -> Memory read data
+- `2'b10` -> PC + 4 (passed through pipeline from IF stage)
+- `2'b11` -> Immediate (imm_u passthrough — used for LUI only)
+
+---
+
+
+[Context 2]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_14
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward select encoding
+- 2'b00 = no forward (use pre-mux value)
+- 2'b01 = forward from MEM/WB (wb_data)
+- 2'b10 = forward from EX/MEM (ex_mem_alu_result)
+
+
+[Context 3]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_7
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Register
+```
+ex_mem_reg_write         ex_mem_alu_result [31:0]
+ex_mem_mem_read          ex_mem_store_data [31:0]
+ex_mem_mem_write         ex_mem_rd         [4:0]
+ex_mem_wb_sel   [1:0]    ex_mem_funct3     [2:0]
+                         ex_mem_pc_plus4   [31:0]
+                         ex_mem_imm_u      [31:0]
+```
+
+
+[Context 4]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_8
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### MEM/WB Register
+```
+mem_wb_reg_write         mem_wb_alu_result [31:0]
+mem_wb_wb_sel   [1:0]    mem_wb_mem_rdata  [31:0]
+mem_wb_rd       [4:0]    mem_wb_pc_plus4   [31:0]
+                         mem_wb_imm_u      [31:0]
+```
+
+---
+
+
+[Context 5]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_15
+Source: 03_pipeline_stages
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Forwarding Value (top-level correction)
+The `ex_mem_alu_result` input to EX stage is actually a mux in rv32i_top that selects:
+- `ex_mem_alu_result` for R/I-type (wb_sel=00)
+- `ex_mem_pc_plus4`  for JAL/JALR  (wb_sel=10)
+- `ex_mem_imm_u`     for LUI       (wb_sel=11)
+
+This ensures the forwarded value matches what will actually be written to rd.
+
+
+[Context 6]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_20
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Store (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+SB (funct3=000): dmem_byte_en = 4'b0001 << byte_off
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SH (funct3=001): dmem_byte_en = byte_off[1] ? 4'b1100 : 4'b0011
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SW (funct3=010): dmem_byte_en = 4'b1111
+                 dmem_wdata   = store_data
+```
+
+
+[Context 7]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_16
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+
+[Context 8]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_11
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Data Paths
+
+```
+rs1_data → alu_srcA mux → opA_pre → forward_a mux → opA_fwd → ALU operand_a
+pc_in    →
+
+rs2_data → alu_srcB mux → opB_pre → forward_b mux → opB_fwd → ALU operand_b
+imm      →
+32'd4    →
+
+store_data ─────────────────────────→ forward_s mux → store_data_fwd → MEM write data
+```
+
+
+[Context 9]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_9
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Signal Flow
+
+```
+IF stage
+  internal imem[pc] -> instr
+  -> if_id_instr, if_id_pc, if_id_pc_plus4 (via IF/ID register)
+
+alu_control
+  <- if_id_instr[6:0]   (opcode)
+  <- if_id_instr[14:12] (funct3)
+  <- if_id_instr[31:25] (funct7)
+  -> alu_op_wire
+
+ID stage
+  <- if_id_instr, if_id_pc, if_id_pc_plus4
+  <- regfile (rs1_data, rs2_data)
+  <- alu_op_wire
+  -> id_* signals (via ID/EX register)
+
+ID/EX register
+  captures ID stage outputs each cycle
+  flush_id_ex zeros all control signals
+  stall holds current values
+
+Forwarding unit
+  <- id_ex_rs1, id_ex_rs2, id_ex_alu_srcB
+  <- ex_mem_reg_write, ex_mem_rd
+  <- mem_wb_reg_write, mem_wb_rd
+  -> forward_a, forward_b, forward_s
+
+EX stage
+  <- id_ex_* signals
+  <- forward_a, forward_b, forward_s
+  <- ex_mem_alu_result (EX/MEM forwarding feedback)
+  <- wb_data (MEM/WB forwarding feedback)
+  -> ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out
+  -> ex_redirect_en, ex_redirect_pc, ex_branch_taken
+  -> ex_reg_write_out, ex_rd_out, ex_wb_sel_out
+  -> ex_mem_read_out, ex_mem_write_out
+
+Hazard unit
+  <- if_id_instr (full 32-bit — extracts rs1[19:15], rs2[24:20] internally)
+  <- id_ex_rd, id_ex_mem_read
+  <- ex_redirect_en (from EX stage)
+  -> stall_pc, stall_if_id, flush_if_id, flush_id_ex
+
+EX/MEM register
+  captures EX stage pass-through outputs each cycle
+  flush_id_ex zeros all control signals
+  NOTE: takes reg_write, mem_read, mem_write, wb_sel from EX stage outputs
+        NOT directly from ID/EX register
+
+MEM stage
+  <- ex_mem_alu_result  (dmem address)
+  <- ex_mem_store_data  (store write data — already forwarded)
+  <- ex_mem_mem_read, ex_mem_mem_write, ex_mem_funct3, ex_mem_wb_sel
+  <- ex_mem_pc_plus4, ex_mem_imm_u (pass-through values)
+  <- ex_mem_reg_write, ex_mem_rd
+  <- dmem_rdata (from data memory array)
+  -> dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re
+  -> mem_rdata_out (sign/zero extended load data)
+  -> mem_alu_result_out, mem_pc_plus4_out, mem_imm_u_out
+  -> mem_wb_sel_out, mem_reg_write_out, mem_rd_out
+
+MEM/WB register
+  captures MEM stage outputs each cycle
+
+WB stage
+  <- mem_wb_alu_result, mem_wb_mem_rdata
+  <- mem_wb_pc_plus4, mem_wb_imm_u
+  <- mem_wb_wb_sel
+  -> wb_data
+
+Regfile write port
+  <- wb_data (from WB stage)
+  <- mem_wb_rd
+  <- mem_wb_reg_write
+
+Feedback paths
+  wb_data          -> ex_stage.wb_data          (MEM/WB forwarding)
+  ex_mem_alu_result -> ex_stage.ex_mem_alu_result (EX/MEM forwarding)
+```
+
+---
+
+
+[Context 10]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_21
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Load (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+LB  (funct3=000): sign-extend byte at byte_off position
+LBU (funct3=100): zero-extend byte at byte_off position
+LH  (funct3=001): sign-extend halfword (lower if byte_off[1]=0, upper if byte_off[1]=1)
+LHU (funct3=101): zero-extend halfword
+LW  (funct3=010): full 32-bit word (aligned)
+```
+
+
+[Context 11]
+Source: corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md
+Chunk ID: 06_common_rtl_bugs_and_fixes_sec_10
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_11', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+
+## Writeback Selection (wb_sel)
+
+- `2'b00` -> ALU result
+- `2'b01` -> Memory read data
+- `2'b10` -> PC + 4 (passed through pipeline from IF stage)
+- `2'b11` -> Immediate (imm_u passthrough — used for LUI only)
+
+---
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_14', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward select encoding
+- 2'b00 = no forward (use pre-mux value)
+- 2'b01 = forward from MEM/WB (wb_data)
+- 2'b10 = forward from EX/MEM (ex_mem_alu_result)
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_7', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Register
+```
+ex_mem_reg_write         ex_mem_alu_result [31:0]
+ex_mem_mem_read          ex_mem_store_data [31:0]
+ex_mem_mem_write         ex_mem_rd         [4:0]
+ex_mem_wb_sel   [1:0]    ex_mem_funct3     [2:0]
+                         ex_mem_pc_plus4   [31:0]
+                         ex_mem_imm_u      [31:0]
+```
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_8', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### MEM/WB Register
+```
+mem_wb_reg_write         mem_wb_alu_result [31:0]
+mem_wb_wb_sel   [1:0]    mem_wb_mem_rdata  [31:0]
+mem_wb_rd       [4:0]    mem_wb_pc_plus4   [31:0]
+                         mem_wb_imm_u      [31:0]
+```
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_15', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Forwarding Value (top-level correction)
+The `ex_mem_alu_result` input to EX stage is actually a mux in rv32i_top that selects:
+- `ex_mem_alu_result` for R/I-type (wb_sel=00)
+- `ex_mem_pc_plus4`  for JAL/JALR  (wb_sel=10)
+- `ex_mem_imm_u`     for LUI       (wb_sel=11)
+
+This ensures the forwarded value matches what will actually be written to rd.
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_20', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Store (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+SB (funct3=000): dmem_byte_en = 4'b0001 << byte_off
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SH (funct3=001): dmem_byte_en = byte_off[1] ? 4'b1100 : 4'b0011
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SW (funct3=010): dmem_byte_en = 4'b1111
+                 dmem_wdata   = store_data
+```
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_16', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_11', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Data Paths
+
+```
+rs1_data → alu_srcA mux → opA_pre → forward_a mux → opA_fwd → ALU operand_a
+pc_in    →
+
+rs2_data → alu_srcB mux → opB_pre → forward_b mux → opB_fwd → ALU operand_b
+imm      →
+32'd4    →
+
+store_data ─────────────────────────→ forward_s mux → store_data_fwd → MEM write data
+```
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_9', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Signal Flow
+
+```
+IF stage
+  internal imem[pc] -> instr
+  -> if_id_instr, if_id_pc, if_id_pc_plus4 (via IF/ID register)
+
+alu_control
+  <- if_id_instr[6:0]   (opcode)
+  <- if_id_instr[14:12] (funct3)
+  <- if_id_instr[31:25] (funct7)
+  -> alu_op_wire
+
+ID stage
+  <- if_id_instr, if_id_pc, if_id_pc_plus4
+  <- regfile (rs1_data, rs2_data)
+  <- alu_op_wire
+  -> id_* signals (via ID/EX register)
+
+ID/EX register
+  captures ID stage outputs each cycle
+  flush_id_ex zeros all control signals
+  stall holds current values
+
+Forwarding unit
+  <- id_ex_rs1, id_ex_rs2, id_ex_alu_srcB
+  <- ex_mem_reg_write, ex_mem_rd
+  <- mem_wb_reg_write, mem_wb_rd
+  -> forward_a, forward_b, forward_s
+
+EX stage
+  <- id_ex_* signals
+  <- forward_a, forward_b, forward_s
+  <- ex_mem_alu_result (EX/MEM forwarding feedback)
+  <- wb_data (MEM/WB forwarding feedback)
+  -> ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out
+  -> ex_redirect_en, ex_redirect_pc, ex_branch_taken
+  -> ex_reg_write_out, ex_rd_out, ex_wb_sel_out
+  -> ex_mem_read_out, ex_mem_write_out
+
+Hazard unit
+  <- if_id_instr (full 32-bit — extracts rs1[19:15], rs2[24:20] internally)
+  <- id_ex_rd, id_ex_mem_read
+  <- ex_redirect_en (from EX stage)
+  -> stall_pc, stall_if_id, flush_if_id, flush_id_ex
+
+EX/MEM register
+  captures EX stage pass-through outputs each cycle
+  flush_id_ex zeros all control signals
+  NOTE: takes reg_write, mem_read, mem_write, wb_sel from EX stage outputs
+        NOT directly from ID/EX register
+
+MEM stage
+  <- ex_mem_alu_result  (dmem address)
+  <- ex_mem_store_data  (store write data — already forwarded)
+  <- ex_mem_mem_read, ex_mem_mem_write, ex_mem_funct3, ex_mem_wb_sel
+  <- ex_mem_pc_plus4, ex_mem_imm_u (pass-through values)
+  <- ex_mem_reg_write, ex_mem_rd
+  <- dmem_rdata (from data memory array)
+  -> dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re
+  -> mem_rdata_out (sign/zero extended load data)
+  -> mem_alu_result_out, mem_pc_plus4_out, mem_imm_u_out
+  -> mem_wb_sel_out, mem_reg_write_out, mem_rd_out
+
+MEM/WB register
+  captures MEM stage outputs each cycle
+
+WB stage
+  <- mem_wb_alu_result, mem_wb_mem_rdata
+  <- mem_wb_pc_plus4, mem_wb_imm_u
+  <- mem_wb_wb_sel
+  -> wb_data
+
+Regfile write port
+  <- wb_data (from WB stage)
+  <- mem_wb_rd
+  <- mem_wb_reg_write
+
+Feedback paths
+  wb_data          -> ex_stage.wb_data          (MEM/WB forwarding)
+  ex_mem_alu_result -> ex_stage.ex_mem_alu_result (EX/MEM forwarding)
+```
+
+---
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_21', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Load (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+LB  (funct3=000): sign-extend byte at byte_off position
+LBU (funct3=100): zero-extend byte at byte_off position
+LH  (funct3=001): sign-extend halfword (lower if byte_off[1]=0, upper if byte_off[1]=1)
+LHU (funct3=101): zero-extend halfword
+LW  (funct3=010): full 32-bit word (aligned)
+```
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/06_common_rtl_bugs_and_fixes.md', 'chunk_id': '06_common_rtl_bugs_and_fixes_sec_10', 'type': 'markdown'}
+Source: 06_common_rtl_bugs_and_fixes
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Rule
+Always assign safe defaults to every output at the top of every `always_comb`
+block before any conditional logic.
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+

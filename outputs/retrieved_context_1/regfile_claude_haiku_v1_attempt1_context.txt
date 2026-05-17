@@ -1,0 +1,542 @@
+TASK LABEL:
+regfile_claude_haiku_v1_attempt1
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I register file.
+
+Module name: rv32i_regfile
+
+Interface:
+input  logic        clk
+input  logic        rst_n
+input  logic [4:0]  rs1_addr
+input  logic [4:0]  rs2_addr
+output logic [31:0] rs1_data
+output logic [31:0] rs2_data
+input  logic [4:0]  rd_addr
+input  logic [31:0] rd_data
+input  logic        reg_write
+
+Coding constraints:
+- 32 x 32-bit register array
+- Use always_comb
+- Use always_ff with async active-low rst_n for writes
+- x0 must always read as 32'b0
+- Implement write-before-read bypass from retrieved context
+
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I register file.
+
+Module name: rv32i_regfile
+
+Interface:
+input  logic        clk
+input  logic        rst_n
+input  logic [4:0]  rs1_addr
+input  logic [4:0]  rs2_addr
+output logic [31:0] rs1_data
+output logic [31:0] rs2_data
+input  logic [4:0]  rd_addr
+input  logic [31:0] rd_data
+input  logic        reg_write
+
+Coding constraints:
+- 32 x 32-bit register array
+- Use always_comb
+- Use always_ff with async active-low rst_n for writes
+- x0 must always read as 32'b0
+- Implement write-before-read bypass from retrieved context
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_25
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data Separate Output
+
+`store_data = rs2_data_in` — a separate output port carrying the rs2 value independently
+for the MEM write data path. Even though it holds the same value as rs2_data_out,
+it travels through a separate pipeline register field (id_ex_store_data) so that
+forward_s can be applied to it independently of forward_b in the EX stage.
+This is required because for store instructions, alu_srcB=01 (imm for address),
+so opB carries the immediate — rs2 (write data) must travel separately.
+
+
+[Context 2]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_10
+Source: 04_architecture
+Keywords: RV32I control signals decode
+
+### alu_srcB (2 bits)
+- `2'b00` -> `rs2_data`
+- `2'b01` -> `immediate` (selected per instruction type)
+- `2'b10` -> constant `32'd4`
+
+---
+
+
+[Context 3]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_1
+Source: 07_regfile_spec
+Keywords: RV32I register file read write port x0
+
+## Overview
+
+The register file contains 32 general-purpose 32-bit registers (x0–x31).
+- x0 is hardwired to zero — reads always return 0, writes are silently ignored
+- Two independent read ports (rs1, rs2)
+- One write port (rd)
+
+---
+
+
+[Context 4]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_3
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Read Port Behavior
+
+- Reads must be **combinational (asynchronous)** — output is valid in the same cycle the address is presented
+- Reading x0 (addr = 5'b0) must always return 32'b0
+- Must implement **write-before-read bypass**: if `reg_write=1` and `rd_addr` matches `rs1_addr` or `rs2_addr`, the read output must return `rd_data` (the new value being written) rather than the stale value from the register array
+
+---
+
+
+[Context 5]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_4
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Write Port Behavior
+
+- Writes are **synchronous** — occur on posedge clk
+- Write is gated: only occurs when `reg_write=1` AND `rd_addr != 5'b0`
+- Writes to x0 must be suppressed — the guard `rd_addr != 5'b0` is mandatory
+- On active-low reset (`rst_n=0`), all registers must be cleared to 0
+
+---
+
+
+[Context 6]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_6
+Source: 07_regfile_spec
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+
+## Common Bugs to Avoid
+
+- Making reads synchronous (registered) — causes one-cycle read delay breaking pipeline timing
+- Missing write-before-read bypass — causes stale register reads when WB and ID access the same register simultaneously
+- Forgetting `rd_addr != 5'b0` guard on write — allows corrupting the hardwired-zero register
+- Using `assign` for reads when bypass logic is needed — use `always_comb` instead
+
+---
+
+
+[Context 7]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_2
+Source: 07_regfile_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Interface
+
+```systemverilog
+module rv32i_regfile (
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic [4:0]  rs1_addr,
+    input  logic [4:0]  rs2_addr,
+    output logic [31:0] rs1_data,
+    output logic [31:0] rs2_data,
+    input  logic [4:0]  rd_addr,
+    input  logic [31:0] rd_data,
+    input  logic        reg_write
+);
+```
+
+---
+
+
+[Context 8]
+Source: corpus/docs/07_regfile_spec.md
+Chunk ID: 07_regfile_spec_sec_5
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+## Write-Before-Read Bypass Requirement
+
+In a 5-stage pipeline, the WB stage writes a register on the rising clock edge while the ID stage reads combinationally in the same cycle. Without bypass, ID would read the stale pre-write value. The bypass must forward `rd_data` directly to the read output whenever `reg_write=1` and the write address matches the read address.
+
+---
+
+
+[Context 9]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_16
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+
+[Context 10]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_7
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibility
+- Decode instruction fields (opcode, funct3, funct7, rs1, rs2, rd)
+- Generate all immediate types (I, S, B, U, J)
+- Generate control signals (reg_write, mem_read, mem_write, branch, jump, alu_srcA, alu_srcB, wb_sel)
+- Read register file
+- Pass store_data (= rs2_data) as a SEPARATE output for the MEM write data path
+
+
+[Context 11]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_13
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_3
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_25', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data Separate Output
+
+`store_data = rs2_data_in` — a separate output port carrying the rs2 value independently
+for the MEM write data path. Even though it holds the same value as rs2_data_out,
+it travels through a separate pipeline register field (id_ex_store_data) so that
+forward_s can be applied to it independently of forward_b in the EX stage.
+This is required because for store instructions, alu_srcB=01 (imm for address),
+so opB carries the immediate — rs2 (write data) must travel separately.
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_10', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I control signals decode
+
+### alu_srcB (2 bits)
+- `2'b00` -> `rs2_data`
+- `2'b01` -> `immediate` (selected per instruction type)
+- `2'b10` -> constant `32'd4`
+
+---
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_1', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I register file read write port x0
+
+## Overview
+
+The register file contains 32 general-purpose 32-bit registers (x0–x31).
+- x0 is hardwired to zero — reads always return 0, writes are silently ignored
+- Two independent read ports (rs1, rs2)
+- One write port (rd)
+
+---
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_3', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Read Port Behavior
+
+- Reads must be **combinational (asynchronous)** — output is valid in the same cycle the address is presented
+- Reading x0 (addr = 5'b0) must always return 32'b0
+- Must implement **write-before-read bypass**: if `reg_write=1` and `rd_addr` matches `rs1_addr` or `rs2_addr`, the read output must return `rd_data` (the new value being written) rather than the stale value from the register array
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_4', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Write Port Behavior
+
+- Writes are **synchronous** — occur on posedge clk
+- Write is gated: only occurs when `reg_write=1` AND `rd_addr != 5'b0`
+- Writes to x0 must be suppressed — the guard `rd_addr != 5'b0` is mandatory
+- On active-low reset (`rst_n=0`), all registers must be cleared to 0
+
+---
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_6', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+
+## Common Bugs to Avoid
+
+- Making reads synchronous (registered) — causes one-cycle read delay breaking pipeline timing
+- Missing write-before-read bypass — causes stale register reads when WB and ID access the same register simultaneously
+- Forgetting `rd_addr != 5'b0` guard on write — allows corrupting the hardwired-zero register
+- Using `assign` for reads when bypass logic is needed — use `always_comb` instead
+
+---
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_2', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I control signals decode
+Keywords: RV32I register file read write port x0
+
+## Interface
+
+```systemverilog
+module rv32i_regfile (
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic [4:0]  rs1_addr,
+    input  logic [4:0]  rs2_addr,
+    output logic [31:0] rs1_data,
+    output logic [31:0] rs2_data,
+    input  logic [4:0]  rd_addr,
+    input  logic [31:0] rd_data,
+    input  logic        reg_write
+);
+```
+
+---
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/07_regfile_spec.md', 'chunk_id': '07_regfile_spec_sec_5', 'type': 'markdown'}
+Source: 07_regfile_spec
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+
+## Write-Before-Read Bypass Requirement
+
+In a 5-stage pipeline, the WB stage writes a register on the rising clock edge while the ID stage reads combinationally in the same cycle. Without bypass, ID would read the stale pre-write value. The bypass must forward `rd_data` directly to the read output whenever `reg_write=1` and the write address matches the read address.
+
+---
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_16', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I register file read write port x0
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Wiring Rules
+
+1. IF stage has internal imem — no external imem ports on rv32i_top
+2. Data memory is a logic array inside rv32i_top — dmem_* wires connect to mem_stage ports
+3. alu_control takes opcode/funct3/funct7 from IF/ID register bits directly
+4. regfile rs1_addr = if_id_instr[19:15], rs2_addr = if_id_instr[24:20]
+5. wb_data feeds back to ex_stage.wb_data for MEM/WB forwarding
+6. ex_mem_alu_result feeds back to ex_stage.ex_mem_alu_result for EX/MEM forwarding
+7. pc_next = ex_redirect_en ? ex_redirect_pc : if_pc_plus4
+8. stall_pc connects to if_stage.stall
+9. flush_if_id connects to if_stage.flush AND IF/ID register flush
+10. flush_id_ex flushes both ID/EX and EX/MEM registers
+11. EX/MEM register takes reg_write/mem_read/mem_write/wb_sel from EX stage outputs
+    NOT directly from ID/EX register — EX stage passes them through
+
+---
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_7', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### Responsibility
+- Decode instruction fields (opcode, funct3, funct7, rs1, rs2, rd)
+- Generate all immediate types (I, S, B, U, J)
+- Generate control signals (reg_write, mem_read, mem_write, branch, jump, alu_srcA, alu_srcB, wb_sel)
+- Read register file
+- Pass store_data (= rs2_data) as a SEPARATE output for the MEM write data path
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_13', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_3', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+================================================================================
+

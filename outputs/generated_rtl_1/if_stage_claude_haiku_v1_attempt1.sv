@@ -1,0 +1,73 @@
+module rv32i_if_stage #(
+    parameter int    MEM_DEPTH = 8192,
+    parameter string MEM_FILE  = ""
+) (
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic        stall,
+    input  logic        flush,
+    input  logic [31:0] pc_next,
+    output logic [31:0] instr,
+    output logic [31:0] pc_out,
+    output logic [31:0] pc_plus4
+);
+
+    // Instruction memory
+    logic [31:0] imem [0:MEM_DEPTH-1];
+
+    // Internal PC register
+    logic [31:0] pc_reg;
+
+    // Address calculation
+    logic [$clog2(MEM_DEPTH)+1:2] imem_addr;
+
+    // NOP instruction constant
+    localparam logic [31:0] NOP = 32'h00000013;
+
+    // ========================================================================
+    // Memory initialization
+    // ========================================================================
+    initial begin
+        // Initialize memory to zeros
+        for (int i = 0; i < MEM_DEPTH; i++) begin
+            imem[i] = 32'h00000000;
+        end
+
+        // Load from MEM_FILE if provided
+        if (MEM_FILE != "") begin
+            $readmemh(MEM_FILE, imem);
+        end else begin
+            // Try to load from +load= plusarg
+            string load_file;
+            if ($value$plusargs("load=%s", load_file)) begin
+                $readmemh(load_file, imem);
+            end
+        end
+    end
+
+    // ========================================================================
+    // Sequential PC update
+    // ========================================================================
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pc_reg <= 32'h00000000;
+        end else if (!stall) begin
+            pc_reg <= pc_next;
+        end
+    end
+
+    // ========================================================================
+    // Word address calculation
+    // ========================================================================
+    assign imem_addr = pc_reg[$clog2(MEM_DEPTH)+1:2];
+
+    // ========================================================================
+    // Continuous assignments for outputs
+    // ========================================================================
+    assign pc_out = pc_reg;
+    assign pc_plus4 = pc_reg + 32'h00000004;
+
+    // Instruction output: NOP on flush, otherwise fetch from memory
+    assign instr = flush ? NOP : imem[imem_addr];
+
+endmodule

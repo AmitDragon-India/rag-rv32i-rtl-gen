@@ -78,12 +78,24 @@ def retrieve_context(query: str, k_rtl: int):
     return docs_text, metadata_text
 
 
-def generate_rtl(task: str, query: str, task_label: str, k_rtl: int):
+def generate_rtl(task: str, query: str, task_label: str, k_rtl: int, api_key: str):
     """Generate RTL and return verilog + metadata."""
     if not hybrid_retriever.is_loaded:
         return "⚠️ Retriever not loaded.", "{}", "{}"
 
+    import os
+    import anthropic
+
+    # Use provided key or fall back to environment variable
+    key = api_key.strip() if api_key and api_key.strip() else os.environ.get("ANTHROPIC_API_KEY", "")
+
+    if not key:
+        return "⚠️ Please enter your Anthropic API key to use generation.", "{}", "{}"
+
     try:
+        # Set the API key for this request
+        generator._client = anthropic.Anthropic(api_key=key)
+
         result = generator.generate(
             task=task,
             retrieval_query=query,
@@ -120,11 +132,20 @@ def build_ui() -> gr.Blocks:
             # 🔧 RAG-RV32I RTL Generator
             **Generate synthesizable SystemVerilog for RV32I processor modules using RAG + LLM**
 
-            Pipeline: Specification → FAISS Retrieval (BGE embeddings) → Context Assembly → Claude Haiku → SystemVerilog
+            Pipeline: Specification → Hybrid Retrieval (FAISS + BM25 + Reranker) → Context Assembly → Claude Haiku → SystemVerilog
 
             *40/42 rv32ui ISA tests passing (95.2%) on generated RTL*
             """
         )
+
+        # ── API Key ───────────────────────────────────
+        with gr.Row():
+            api_key_input = gr.Textbox(
+                label="🔑 Anthropic API Key (required for RTL generation)",
+                placeholder="sk-ant-...",
+                type="password",
+                info="Your key is used only for this session and never stored. Get one at console.anthropic.com. Retrieval works without a key.",
+            )
 
         # ── Quick start examples ─────────────────────
         with gr.Row():
@@ -205,7 +226,7 @@ def build_ui() -> gr.Blocks:
 
         generate_btn.click(
             fn=generate_rtl,
-            inputs=[task_input, query_input, label_input, k_rtl_slider],
+            inputs=[task_input, query_input, label_input, k_rtl_slider, api_key_input],
             outputs=[verilog_output, validation_output, gen_meta_output],
         )
 

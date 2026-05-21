@@ -1,0 +1,680 @@
+TASK LABEL:
+rv32i_forward_unit
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I pipeline forwarding unit.
+
+Module name: rv32i_forward_unit
+
+Interface:
+input  logic [4:0]  id_ex_rs1
+input  logic [4:0]  id_ex_rs2
+input  logic [1:0]  id_ex_alu_srcB
+input  logic        ex_mem_reg_write
+input  logic [4:0]  ex_mem_rd
+input  logic        mem_wb_reg_write
+input  logic [4:0]  mem_wb_rd
+output logic [1:0]  forward_a
+output logic [1:0]  forward_b
+output logic [1:0]  forward_s
+
+Coding constraints:
+- Use localparam for forwarding encoding
+- EX/MEM priority over MEM/WB
+- Take forwarding logic from retrieved context
+- Pure combinational always_comb only
+
+
+RETRIEVAL MODE: hybrid (FAISS + BM25 + Reranker)
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I pipeline forwarding unit.
+
+Module name: rv32i_forward_unit
+
+Interface:
+input  logic [4:0]  id_ex_rs1
+input  logic [4:0]  id_ex_rs2
+input  logic [1:0]  id_ex_alu_srcB
+input  logic        ex_mem_reg_write
+input  logic [4:0]  ex_mem_rd
+input  logic        mem_wb_reg_write
+input  logic [4:0]  mem_wb_rd
+output logic [1:0]  forward_a
+output logic [1:0]  forward_b
+output logic [1:0]  forward_s
+
+Coding constraints:
+- Use localparam for forwarding encoding
+- EX/MEM priority over MEM/WB
+- Take forwarding logic from retrieved context
+- Pure combinational always_comb only
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_13
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward Select Encoding
+
+```
+2'b00 = no forward (use ID/EX pipeline register value)
+2'b01 = forward from MEM/WB (wb_data)
+2'b10 = forward from EX/MEM (ex_mem_fwd_data)
+```
+
+EX/MEM always takes priority over MEM/WB. Never forward when rd=x0.
+
+
+[Context 2]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_9
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Signal Flow
+
+```
+IF stage
+  internal imem[pc] -> instr
+  -> if_id_instr, if_id_pc, if_id_pc_plus4 (via IF/ID register)
+
+alu_control
+  <- if_id_instr[6:0]   (opcode)
+  <- if_id_instr[14:12] (funct3)
+  <- if_id_instr[31:25] (funct7)
+  -> alu_op_wire
+
+ID stage
+  <- if_id_instr, if_id_pc, if_id_pc_plus4
+  <- regfile (rs1_data, rs2_data)
+  <- alu_op_wire
+  -> id_* signals (via ID/EX register)
+
+ID/EX register
+  captures ID stage outputs each cycle
+  flush_id_ex zeros all control signals
+  stall holds current values
+
+Forwarding unit
+  <- id_ex_rs1, id_ex_rs2, id_ex_alu_srcB
+  <- ex_mem_reg_write, ex_mem_rd
+  <- mem_wb_reg_write, mem_wb_rd
+  -> forward_a, forward_b, forward_s
+
+EX stage
+  <- id_ex_* signals
+  <- forward_a, forward_b, forward_s
+  <- ex_mem_alu_result (EX/MEM forwarding feedback)
+  <- wb_data (MEM/WB forwarding feedback)
+  -> ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out
+  -> ex_redirect_en, ex_redirect_pc, ex_branch_taken
+  -> ex_reg_write_out, ex_rd_out, ex_wb_sel_out
+  -> ex_mem_read_out, ex_mem_write_out
+
+Hazard unit
+  <- if_id_instr (full 32-bit — extracts rs1[19:15], rs2[24:20] internally)
+  <- id_ex_rd, id_ex_mem_read
+  <- ex_redirect_en (from EX stage)
+  -> stall_pc, stall_if_id, flush_if_id, flush_id_ex
+
+EX/MEM register
+  captures EX stage pass-through outputs each cycle
+  flush_id_ex zeros all control signals
+  NOTE: takes reg_write, mem_read, mem_write, wb_sel from EX stage outputs
+        NOT directly from ID/EX register
+
+MEM stage
+  <- ex_mem_alu_result  (dmem address)
+  <- ex_mem_store_data  (store write data — already forwarded)
+  <- ex_mem_mem_read, ex_mem_mem_write, ex_mem_funct3, ex_mem_wb_sel
+  <- ex_mem_pc_plus4, ex_mem_imm_u (pass-through values)
+  <- ex_mem_reg_write, ex_mem_rd
+  <- dmem_rdata (from data memory array)
+  -> dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re
+  -> mem_rdata_out (sign/zero extended load data)
+  -> mem_alu_result_out, mem_pc_plus4_out, mem_imm_u_out
+  -> mem_wb_sel_out, mem_reg_write_out, mem_rd_out
+
+MEM/WB register
+  captures MEM stage outputs each cycle
+
+WB stage
+  <- mem_wb_alu_result, mem_wb_mem_rdata
+  <- mem_wb_pc_plus4, mem_wb_imm_u
+  <- mem_wb_wb_sel
+  -> wb_data
+
+Regfile write port
+  <- wb_data (from WB stage)
+  <- mem_wb_rd
+  <- mem_wb_reg_write
+
+Feedback paths
+  wb_data          -> ex_stage.wb_data          (MEM/WB forwarding)
+  ex_mem_alu_result -> ex_stage.ex_mem_alu_result (EX/MEM forwarding)
+```
+
+---
+
+
+[Context 3]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_25
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data Separate Output
+
+`store_data = rs2_data_in` — a separate output port carrying the rs2 value independently
+for the MEM write data path. Even though it holds the same value as rs2_data_out,
+it travels through a separate pipeline register field (id_ex_store_data) so that
+forward_s can be applied to it independently of forward_b in the EX stage.
+This is required because for store instructions, alu_srcB=01 (imm for address),
+so opB carries the immediate — rs2 (write data) must travel separately.
+
+
+[Context 4]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_15
+Source: 09_hazard_control
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Why forward_b is Guarded
+
+For store instructions: `alu_srcB=01` so opB carries the immediate (address offset).
+Forwarding to opB would corrupt the address. store_data carries rs2 separately via forward_s.
+forward_b must only assert when `alu_srcB==00` (R-type, branch — rs2 is ALU operand B).
+
+
+[Context 5]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_14
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward select encoding
+- 2'b00 = no forward (use pre-mux value)
+- 2'b01 = forward from MEM/WB (wb_data)
+- 2'b10 = forward from EX/MEM (ex_mem_alu_result)
+
+
+[Context 6]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_8
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data separation
+`store_data = rs2_data_in` — carried independently through ID/EX to EX stage so the forwarding unit can apply `forward_s` to it separately from `opB` (which may use immediate for store address).
+
+---
+
+
+[Context 7]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_11
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Data Paths
+
+```
+rs1_data → alu_srcA mux → opA_pre → forward_a mux → opA_fwd → ALU operand_a
+pc_in    →
+
+rs2_data → alu_srcB mux → opB_pre → forward_b mux → opB_fwd → ALU operand_b
+imm      →
+32'd4    →
+
+store_data ─────────────────────────→ forward_s mux → store_data_fwd → MEM write data
+```
+
+
+[Context 8]
+Source: corpus/docs/09_hazard_control.md
+Chunk ID: 09_hazard_control_sec_14
+Source: 09_hazard_control
+Keywords: table reference specification
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Three Independent Forwarding Paths
+
+| Signal      | Checks  | Guard                    | Purpose                        |
+|-------------|---------|--------------------------|--------------------------------|
+| forward_a   | rs1     | None                     | ALU operand A                  |
+| forward_b   | rs2     | id_ex_alu_srcB == 2'b00  | ALU operand B (R-type only)    |
+| forward_s   | rs2     | None                     | Store write data (always rs2)  |
+
+
+[Context 9]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_6
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### ID/EX Register
+```
+id_ex_reg_write          id_ex_rs1_data   [31:0]
+id_ex_mem_read           id_ex_rs2_data   [31:0]
+id_ex_mem_write          id_ex_store_data [31:0]
+id_ex_branch             id_ex_imm        [31:0]
+id_ex_jump               id_ex_pc         [31:0]
+id_ex_alu_srcA           id_ex_pc_plus4   [31:0]
+id_ex_alu_srcB  [1:0]    id_ex_rd         [4:0]
+id_ex_wb_sel    [1:0]    id_ex_rs1        [4:0]
+id_ex_alu_op    [3:0]    id_ex_rs2        [4:0]
+id_ex_funct3    [2:0]    id_ex_opcode     [6:0]
+```
+
+
+[Context 10]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_7
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Register
+```
+ex_mem_reg_write         ex_mem_alu_result [31:0]
+ex_mem_mem_read          ex_mem_store_data [31:0]
+ex_mem_mem_write         ex_mem_rd         [4:0]
+ex_mem_wb_sel   [1:0]    ex_mem_funct3     [2:0]
+                         ex_mem_pc_plus4   [31:0]
+                         ex_mem_imm_u      [31:0]
+```
+
+
+[Context 11]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_9
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 2-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        1'b0: y = a;
+        1'b1: y = b;
+        default: y = '0;
+    endcase
+end
+```
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_13', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward Select Encoding
+
+```
+2'b00 = no forward (use ID/EX pipeline register value)
+2'b01 = forward from MEM/WB (wb_data)
+2'b10 = forward from EX/MEM (ex_mem_fwd_data)
+```
+
+EX/MEM always takes priority over MEM/WB. Never forward when rd=x0.
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_9', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I branch jump redirect PC target comparison
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+Keywords: RV32I hazard unit load use stall flush control
+
+## Signal Flow
+
+```
+IF stage
+  internal imem[pc] -> instr
+  -> if_id_instr, if_id_pc, if_id_pc_plus4 (via IF/ID register)
+
+alu_control
+  <- if_id_instr[6:0]   (opcode)
+  <- if_id_instr[14:12] (funct3)
+  <- if_id_instr[31:25] (funct7)
+  -> alu_op_wire
+
+ID stage
+  <- if_id_instr, if_id_pc, if_id_pc_plus4
+  <- regfile (rs1_data, rs2_data)
+  <- alu_op_wire
+  -> id_* signals (via ID/EX register)
+
+ID/EX register
+  captures ID stage outputs each cycle
+  flush_id_ex zeros all control signals
+  stall holds current values
+
+Forwarding unit
+  <- id_ex_rs1, id_ex_rs2, id_ex_alu_srcB
+  <- ex_mem_reg_write, ex_mem_rd
+  <- mem_wb_reg_write, mem_wb_rd
+  -> forward_a, forward_b, forward_s
+
+EX stage
+  <- id_ex_* signals
+  <- forward_a, forward_b, forward_s
+  <- ex_mem_alu_result (EX/MEM forwarding feedback)
+  <- wb_data (MEM/WB forwarding feedback)
+  -> ex_alu_result, ex_store_data_fwd, ex_pc_plus4_out
+  -> ex_redirect_en, ex_redirect_pc, ex_branch_taken
+  -> ex_reg_write_out, ex_rd_out, ex_wb_sel_out
+  -> ex_mem_read_out, ex_mem_write_out
+
+Hazard unit
+  <- if_id_instr (full 32-bit — extracts rs1[19:15], rs2[24:20] internally)
+  <- id_ex_rd, id_ex_mem_read
+  <- ex_redirect_en (from EX stage)
+  -> stall_pc, stall_if_id, flush_if_id, flush_id_ex
+
+EX/MEM register
+  captures EX stage pass-through outputs each cycle
+  flush_id_ex zeros all control signals
+  NOTE: takes reg_write, mem_read, mem_write, wb_sel from EX stage outputs
+        NOT directly from ID/EX register
+
+MEM stage
+  <- ex_mem_alu_result  (dmem address)
+  <- ex_mem_store_data  (store write data — already forwarded)
+  <- ex_mem_mem_read, ex_mem_mem_write, ex_mem_funct3, ex_mem_wb_sel
+  <- ex_mem_pc_plus4, ex_mem_imm_u (pass-through values)
+  <- ex_mem_reg_write, ex_mem_rd
+  <- dmem_rdata (from data memory array)
+  -> dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re
+  -> mem_rdata_out (sign/zero extended load data)
+  -> mem_alu_result_out, mem_pc_plus4_out, mem_imm_u_out
+  -> mem_wb_sel_out, mem_reg_write_out, mem_rd_out
+
+MEM/WB register
+  captures MEM stage outputs each cycle
+
+WB stage
+  <- mem_wb_alu_result, mem_wb_mem_rdata
+  <- mem_wb_pc_plus4, mem_wb_imm_u
+  <- mem_wb_wb_sel
+  -> wb_data
+
+Regfile write port
+  <- wb_data (from WB stage)
+  <- mem_wb_rd
+  <- mem_wb_reg_write
+
+Feedback paths
+  wb_data          -> ex_stage.wb_data          (MEM/WB forwarding)
+  ex_mem_alu_result -> ex_stage.ex_mem_alu_result (EX/MEM forwarding)
+```
+
+---
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_25', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data Separate Output
+
+`store_data = rs2_data_in` — a separate output port carrying the rs2 value independently
+for the MEM write data path. Even though it holds the same value as rs2_data_out,
+it travels through a separate pipeline register field (id_ex_store_data) so that
+forward_s can be applied to it independently of forward_b in the EX stage.
+This is required because for store instructions, alu_srcB=01 (imm for address),
+so opB carries the immediate — rs2 (write data) must travel separately.
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_15', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Why forward_b is Guarded
+
+For store instructions: `alu_srcB=01` so opB carries the immediate (address offset).
+Forwarding to opB would corrupt the address. store_data carries rs2 separately via forward_s.
+forward_b must only assert when `alu_srcB==00` (R-type, branch — rs2 is ALU operand B).
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_14', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Forward select encoding
+- 2'b00 = no forward (use pre-mux value)
+- 2'b01 = forward from MEM/WB (wb_data)
+- 2'b10 = forward from EX/MEM (ex_mem_alu_result)
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_8', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### store_data separation
+`store_data = rs2_data_in` — carried independently through ID/EX to EX stage so the forwarding unit can apply `forward_s` to it separately from `opB` (which may use immediate for store address).
+
+---
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_11', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Data Paths
+
+```
+rs1_data → alu_srcA mux → opA_pre → forward_a mux → opA_fwd → ALU operand_a
+pc_in    →
+
+rs2_data → alu_srcB mux → opB_pre → forward_b mux → opB_fwd → ALU operand_b
+imm      →
+32'd4    →
+
+store_data ─────────────────────────→ forward_s mux → store_data_fwd → MEM write data
+```
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/09_hazard_control.md', 'chunk_id': '09_hazard_control_sec_14', 'type': 'markdown'}
+Source: 09_hazard_control
+Keywords: table reference specification
+Keywords: RV32I control signals decode
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### Three Independent Forwarding Paths
+
+| Signal      | Checks  | Guard                    | Purpose                        |
+|-------------|---------|--------------------------|--------------------------------|
+| forward_a   | rs1     | None                     | ALU operand A                  |
+| forward_b   | rs2     | id_ex_alu_srcB == 2'b00  | ALU operand B (R-type only)    |
+| forward_s   | rs2     | None                     | Store write data (always rs2)  |
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_6', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+
+### ID/EX Register
+```
+id_ex_reg_write          id_ex_rs1_data   [31:0]
+id_ex_mem_read           id_ex_rs2_data   [31:0]
+id_ex_mem_write          id_ex_store_data [31:0]
+id_ex_branch             id_ex_imm        [31:0]
+id_ex_jump               id_ex_pc         [31:0]
+id_ex_alu_srcA           id_ex_pc_plus4   [31:0]
+id_ex_alu_srcB  [1:0]    id_ex_rd         [4:0]
+id_ex_wb_sel    [1:0]    id_ex_rs1        [4:0]
+id_ex_alu_op    [3:0]    id_ex_rs2        [4:0]
+id_ex_funct3    [2:0]    id_ex_opcode     [6:0]
+```
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_7', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: RV32I control signals decode
+Keywords: RV32I immediate generation sign extension
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+### EX/MEM Register
+```
+ex_mem_reg_write         ex_mem_alu_result [31:0]
+ex_mem_mem_read          ex_mem_store_data [31:0]
+ex_mem_mem_write         ex_mem_rd         [4:0]
+ex_mem_wb_sel   [1:0]    ex_mem_funct3     [2:0]
+                         ex_mem_pc_plus4   [31:0]
+                         ex_mem_imm_u      [31:0]
+```
+
+================================================================================
+
+[Context 11] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_9', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 2-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        1'b0: y = a;
+        1'b1: y = b;
+        default: y = '0;
+    endcase
+end
+```
+
+================================================================================
+

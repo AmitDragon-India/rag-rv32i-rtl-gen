@@ -1,0 +1,214 @@
+{
+  "baseline_mode": "dense_only",
+  "new_mode": "hybrid",
+  "new_reranker": true,
+  "modules": {
+    "rv32i_alu": {
+      "baseline_chunks": 14,
+      "new_chunks": 14,
+      "overlap": 11,
+      "overlap_pct": 0.7857,
+      "missing": [
+        "ibex_decoder_rtl_4_3",
+        "04_architecture_sec_4",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "04_architecture_sec_23",
+        "ibex_decoder_rtl_4_6",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 20583.86
+    },
+    "rv32i_alu_control": {
+      "baseline_chunks": 14,
+      "new_chunks": 14,
+      "overlap": 9,
+      "overlap_pct": 0.6429,
+      "missing": [
+        "04_architecture_sec_5",
+        "08_alu_spec_sec_3",
+        "03_pipeline_stages_sec_13",
+        "ibex_decoder_rtl_4_7",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "04_architecture_sec_12",
+        "04_architecture_sec_22",
+        "08_alu_spec_sec_2",
+        "ibex_decoder_rtl_4_1",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 1567.07
+    },
+    "rv32i_regfile": {
+      "baseline_chunks": 14,
+      "new_chunks": 14,
+      "overlap": 11,
+      "overlap_pct": 0.7857,
+      "missing": [
+        "ibex_decoder_rtl_1_0",
+        "ibex_register_file_ff_rtl_3_0",
+        "04_architecture_sec_10"
+      ],
+      "added": [
+        "ibex_register_file_ff_rtl_0_0",
+        "10_top_integration_sec_2",
+        "ibex_decoder_rtl_2_0"
+      ],
+      "retrieval_time_ms": 1731.99
+    },
+    "rv32i_if_stage": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 9,
+      "overlap_pct": 0.75,
+      "missing": [
+        "03_pipeline_stages_sec_31",
+        "03_pipeline_stages_sec_1",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "09_hazard_control_sec_2",
+        "10_top_integration_sec_17",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 1293.84
+    },
+    "rv32i_id_stage": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 9,
+      "overlap_pct": 0.75,
+      "missing": [
+        "10_top_integration_sec_7",
+        "10_top_integration_sec_8",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "04_architecture_sec_15",
+        "03_pipeline_stages_sec_12",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 1306.65
+    },
+    "rv32i_ex_stage": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 7,
+      "overlap_pct": 0.5833,
+      "missing": [
+        "03_pipeline_stages_sec_12",
+        "10_top_integration_sec_6",
+        "03_pipeline_stages_sec_14",
+        "06_common_rtl_bugs_and_fixes_sec_10",
+        "04_architecture_sec_12"
+      ],
+      "added": [
+        "03_pipeline_stages_sec_10",
+        "09_hazard_control_sec_17",
+        "09_hazard_control_sec_2",
+        "04_architecture_sec_18",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 1355.76
+    },
+    "rv32i_mem_stage": {
+      "baseline_chunks": 12,
+      "new_chunks": 13,
+      "overlap": 11,
+      "overlap_pct": 0.9167,
+      "missing": [
+        "02_Instruction_sec_40"
+      ],
+      "added": [
+        "10_top_integration_sec_10",
+        "ibex_decoder_rtl_3_1"
+      ],
+      "retrieval_time_ms": 1461.5
+    },
+    "rv32i_wb_stage": {
+      "baseline_chunks": 14,
+      "new_chunks": 14,
+      "overlap": 7,
+      "overlap_pct": 0.5,
+      "missing": [
+        "10_top_integration_sec_9",
+        "10_top_integration_sec_8",
+        "03_pipeline_stages_sec_21",
+        "ibex_alu_rtl_17_0",
+        "10_top_integration_sec_16",
+        "03_pipeline_stages_sec_20",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "04_architecture_sec_13",
+        "03_pipeline_stages_sec_19",
+        "04_architecture_sec_28",
+        "03_pipeline_stages_sec_31",
+        "08_alu_spec_sec_4",
+        "05_verilog_design_patterns_sec_9",
+        "ibex_alu_rtl_20_0"
+      ],
+      "retrieval_time_ms": 1218.02
+    },
+    "rv32i_hazard_unit": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 9,
+      "overlap_pct": 0.75,
+      "missing": [
+        "03_pipeline_stages_sec_1",
+        "03_pipeline_stages_sec_3",
+        "10_top_integration_sec_5"
+      ],
+      "added": [
+        "09_hazard_control_sec_6",
+        "09_hazard_control_sec_2",
+        "09_hazard_control_sec_17"
+      ],
+      "retrieval_time_ms": 949.94
+    },
+    "rv32i_forward_unit": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 9,
+      "overlap_pct": 0.75,
+      "missing": [
+        "10_top_integration_sec_16",
+        "03_pipeline_stages_sec_7",
+        "06_common_rtl_bugs_and_fixes_sec_10"
+      ],
+      "added": [
+        "10_top_integration_sec_9",
+        "10_top_integration_sec_6",
+        "05_verilog_design_patterns_sec_9"
+      ],
+      "retrieval_time_ms": 1227.94
+    },
+    "rv32i_top": {
+      "baseline_chunks": 12,
+      "new_chunks": 12,
+      "overlap": 9,
+      "overlap_pct": 0.75,
+      "missing": [
+        "03_pipeline_stages_sec_31",
+        "03_pipeline_stages_sec_5",
+        "10_top_integration_sec_5"
+      ],
+      "added": [
+        "10_top_integration_sec_9",
+        "03_pipeline_stages_sec_15",
+        "03_pipeline_stages_sec_11"
+      ],
+      "retrieval_time_ms": 1331.81
+    }
+  },
+  "summary": {
+    "avg_overlap_pct": 0.7214,
+    "total_baseline_chunks": 140,
+    "total_overlap": 101,
+    "total_new_added": 40,
+    "total_missing": 39
+  }
+}

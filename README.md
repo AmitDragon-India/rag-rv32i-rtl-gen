@@ -1,179 +1,164 @@
 # RAG-Driven RV32I RTL Generation
 
-A RAG pipeline that generates synthesizable SystemVerilog for a 5-stage in-order RV32I processor from behavioral specifications.
+A production-grade RAG pipeline that generates synthesizable SystemVerilog for a 5-stage in-order RV32I processor from behavioral specifications.
+
+**40/42 rv32ui ISA tests passing (95.2%)** — validated under Verilator simulation.
+
+## Architecture
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │        Corpus: 335 chunks from 13 files     │
+                    │  8 spec docs · design patterns · Ibex RTL   │
+                    └──────────┬──────────────────────┬───────────┘
+                               │                      │
+                    ┌──────────▼──────────┐ ┌─────────▼──────────┐
+                    │  FAISS Dense Index  │ │  BM25 Sparse Index │
+                    │  (BGE embeddings)   │ │ (keyword matching) │
+                    └──────────┬──────────┘ └─────────┬──────────┘
+                               │                      │
+                    ┌──────────▼──────────────────────▼──────────┐
+User Query ──────►  │     Reciprocal Rank Fusion (RRF, k=60)     │
+                    └──────────────────────┬─────────────────────┘
+                                           │
+                    ┌──────────────────────▼─────────────────────┐
+                    │  Cross-Encoder Reranker (ms-marco-MiniLM)  │
+                    └──────────────────────┬─────────────────────┘
+                                           │
+                    ┌──────────────────────▼─────────────────────┐
+                    │   Structured Filtering (Spec→Pattern→RTL)  │
+                    └──────────────────────┬─────────────────────┘
+                                           │
+                    ┌──────────────────────▼─────────────────────┐
+                    │       Claude Haiku → SystemVerilog RTL     │
+                    └────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+- **Hybrid retrieval** — FAISS (semantic similarity) + BM25 (exact keyword matching), combined via Reciprocal Rank Fusion. FAISS catches semantic relationships (`register storage` ≈ `regfile`), BM25 catches exact signal names (`always_comb`, `stall_pc`)
+- **Cross-encoder reranking** — `ms-marco-MiniLM-L-6-v2` jointly scores (query, document) pairs for final precision
+- **3-stage structured filtering** — spec documents, design patterns, and RTL references retrieved with independent strategies per category
+- **Semantic RTL chunking** — splits SystemVerilog by module boundaries and behavioral blocks (`always_ff`, `always_comb`), not arbitrary character counts
+- **Hardware-aware BM25 tokenizer** — preserves underscored identifiers (`always_comb`, `alu_srcA`, `ex_mem_rd`) as single tokens instead of splitting on underscores
 
 ## Results
-**40/42 rv32ui-p ISA tests passing (95.2%)** — Verilator simulation
 
 | Metric | Value |
 |--------|-------|
 | ISA tests passing | 40/42 (95.2%) |
-| Failing | fence_i (FENCE not implemented), ma_data (misaligned cross-word load) |
-| LLM | Claude Haiku (claude-haiku-4-5-20251001) |
-| Embedding | BAAI/bge-base-en-v1.5 |
-| Vector store | FAISS |
+| Failing tests | `fence_i` (FENCE not implemented), `ma_data` (misaligned cross-word load) |
+| Modules generated | 11 SystemVerilog modules |
+| Corpus | 335 chunks (261 markdown, 74 RTL) from 13 source files |
+| LLM | Claude Haiku (`claude-haiku-4-5-20251001`) |
+| Embedding model | BAAI/bge-base-en-v1.5 |
+| Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
 | Simulator | Verilator 5.048 |
 
----
+Both dense-only (FAISS) and hybrid (FAISS + BM25 + reranker) retrieval produce 40/42 passing RTL. The hybrid pipeline adds BM25 keyword matching and cross-encoder reranking for improved context selection, while both achieve the same functional correctness.
 
-## Setup
+## Quick Start
 
-### 1. Install Python dependencies
-
-```bash
-pip install -r requirement.txt
-```
-
-### 2. Build the RAG index
+### 1. Install dependencies
 
 ```bash
-python3 scripts/chunk_corpus.py   # chunk corpus docs into ~180 chunks
-python3 scripts/build_index.py    # embed chunks and build FAISS index
+pip install -r requirements.txt
 ```
 
-### 3. Generate RTL
+### 2. Set API key
 
 ```bash
-python3 scripts/generate_rtl.py   # generates all 11 .sv files
+export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-Generated files appear in `outputs/generated_rtl/rv32i_*.sv`
-
----
-
-## Simulation Setup
-
-### 1. Install Verilator
+### 3. Build the RAG index
 
 ```bash
-# Ubuntu/WSL
-sudo apt-get install verilator
-# Or build from source for latest version:
-# https://verilator.org/guide/latest/install.html
+python scripts/chunk_corpus.py    # chunk corpus → outputs/chunks.json
+python scripts/build_index.py     # embed + build FAISS index
 ```
 
-### 2. Install RISC-V toolchain
+### 4. Generate RTL
 
 ```bash
-sudo apt-get install gcc-riscv64-unknown-elf
+# Generate all 11 modules (hybrid retrieval)
+python scripts/generate_hybrid.py
+
+# Generate a single module
+python scripts/generate_hybrid.py --module alu
 ```
 
-### 3. Clone and build riscv-tests
+### 5. Run the API server
 
 ```bash
-cd ~/
-git clone https://github.com/riscv/riscv-tests
-cd riscv-tests
-git submodule update --init --recursive
-autoconf
-./configure --prefix=/usr/local
-make
+python main.py api
+# → http://localhost:8000/docs (Swagger UI)
 ```
 
----
-
-## Hex File Preparation
-
-The riscv-tests binaries are linked at base address `0x80000000` but our processor starts execution at `0x00000000`. The memory also uses word-addressed hex format. Three steps are required:
-
-### Step 1 — Relocate from 0x80000000 to 0x00000000
+### 6. Or launch the Gradio UI
 
 ```bash
-riscv64-unknown-elf-objcopy \
-    --change-addresses -0x80000000 \
-    rv32ui-p-add \
-    rv32ui-p-add-relocated
+python main.py ui
+# → http://localhost:7860
 ```
 
-This subtracts `0x80000000` from all addresses in the ELF binary. Code that was at `0x80000000` now starts at `0x00000000`, which is where our instruction memory begins.
-
-### Step 2 — Convert ELF to Verilog hex format
+### 7. Or use Docker
 
 ```bash
-riscv64-unknown-elf-objcopy \
-    -O verilog \
-    rv32ui-p-add-relocated \
-    rv32ui-p-add-relocated.hex
+docker build -t rag-rv32i .
+docker run -p 8000:8000 -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY rag-rv32i
 ```
 
-This produces a hex file with `@ADDRESS` markers and byte-per-line format:
-```
-@00000000
-6F 00 00 05 73 2F 20 34 ...
-@00001000
-FF 00 F0 0F 00 00 00 00 ...
-```
+## API Endpoints
 
-The `@00001000` section contains the test data (e.g., `tohost` variable at `0x1000`, `begin_signature` at `0x2000`).
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check with retrieval mode, uptime |
+| `POST` | `/retrieve` | Hybrid retrieval with timing breakdown |
+| `POST` | `/generate` | Full pipeline: retrieve → generate → validate |
+| `POST` | `/evaluate` | Run evaluation across all 11 modules |
+| `GET` | `/config` | Current pipeline configuration |
 
-### Step 3 — Convert to word-addressed hex preserving address markers
+### Example: Retrieve context
 
 ```bash
-python3 convert_hex_preserve_addr.py rv32ui-p-add-relocated.hex
+curl -X POST http://localhost:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "RV32I ALU operations ADD SUB alu_op encoding",
+    "k_rtl": 2,
+    "rerank": true
+  }'
 ```
 
-This converts the byte-addressed hex to 32-bit word-addressed format **while preserving the `@` address markers**. This is critical — without preserving markers, `$readmemh` loads all data sequentially from index 0, so the data section at `0x2000` would end up at the wrong memory location.
+## Evaluation
 
-Output: `rv32ui-p-add-relocated_word.hex` with format:
-```
-@00000000
-0500006f
-...
-@00000400
-0ff00f00
-...
-```
+The primary evaluation metric is **functional correctness**: does the generated RTL pass RISC-V ISA tests? Both dense-only and hybrid retrieval achieve 40/42 (95.2%).
 
-Word address = byte address / 4. So byte `0x2000` → word index `0x800`.
-
-### Batch convert all tests
+For retrieval quality, the project includes an auto-calibration framework that captures baseline retrieval results and compares when switching strategies — no manually curated ground truth needed.
 
 ```bash
-cd ~/riscv-tests/isa
+# Capture baseline from working retrieval
+python -m app.calibrate --mode baseline
 
-for f in rv32ui-p-*; do
-    if [ -f "$f" ] && [[ "$f" != *.hex ]] && [[ "$f" != *-relocated* ]]; then
-        riscv64-unknown-elf-objcopy --change-addresses -0x80000000 "$f" "${f}-relocated"
-        riscv64-unknown-elf-objcopy -O verilog "${f}-relocated" "${f}-relocated.hex"
-        python3 ~/path/to/convert_hex_preserve_addr.py "${f}-relocated.hex"
-        echo "Done: $f"
-    fi
-done
+# Compare hybrid against baseline
+python -m app.calibrate --mode compare
+
+# Dense vs hybrid evaluation
+python main.py eval
 ```
 
----
-
-## Build and Run Simulation
+## Simulation
 
 ### Compile with Verilator
 
 ```bash
-cd ~/Amit/rag_rtl_project
-
 verilator --cc --exe --build -j 4 --Wall \
-   outputs/generated_rtl/rv32i_top.sv \
-   outputs/generated_rtl/rv32i_if_stage.sv \
-   outputs/generated_rtl/rv32i_id_stage.sv \
-   outputs/generated_rtl/rv32i_alu_control.sv \
-   outputs/generated_rtl/rv32i_alu.sv \
-   outputs/generated_rtl/rv32i_regfile.sv \
-   outputs/generated_rtl/rv32i_ex_stage.sv \
-   outputs/generated_rtl/rv32i_mem_stage.sv \
-   outputs/generated_rtl/rv32i_wb_stage.sv \
-   outputs/generated_rtl/rv32i_hazard_unit.sv \
-   outputs/generated_rtl/rv32i_forward_unit.sv \
+   outputs/generated_rtl/rv32i_*.sv \
    --exe sim_main.cpp \
-   --top-module rv32i_top \
-   -o sim
+   --top-module rv32i_top -o sim
 ```
 
-### Run a single test
-
-```bash
-./obj_dir/sim +load=/path/to/rv32ui-p-add-relocated_word.hex
-```
-
-### Run all tests
+### Run ISA tests
 
 ```bash
 pass=0; fail=0; timeout=0
@@ -187,32 +172,85 @@ done
 echo "Results: PASS=$pass FAIL=$fail TIMEOUT=$timeout"
 ```
 
----
+## Hex File Preparation
+
+The riscv-tests binaries are linked at `0x80000000` but the processor starts at `0x00000000`. Three conversion steps:
+
+```bash
+# Relocate addresses
+riscv64-unknown-elf-objcopy --change-addresses -0x80000000 rv32ui-p-add rv32ui-p-add-relocated
+
+# Convert to Verilog hex format
+riscv64-unknown-elf-objcopy -O verilog rv32ui-p-add-relocated rv32ui-p-add-relocated.hex
+
+# Convert to word-addressed hex (preserving @address markers)
+python3 convert_hex_preserve_addr.py rv32ui-p-add-relocated.hex
+```
+
+Batch convert all tests:
+
+```bash
+cd ~/riscv-tests/isa
+for f in rv32ui-p-*; do
+    if [ -f "$f" ] && [[ "$f" != *.hex ]] && [[ "$f" != *-relocated* ]]; then
+        riscv64-unknown-elf-objcopy --change-addresses -0x80000000 "$f" "${f}-relocated"
+        riscv64-unknown-elf-objcopy -O verilog "${f}-relocated" "${f}-relocated.hex"
+        python3 ~/path/to/convert_hex_preserve_addr.py "${f}-relocated.hex"
+    fi
+done
+```
 
 ## Project Structure
 
 ```
 rag-rv32i-rtl-gen/
-├── corpus/
-│   ├── docs/                    # RV32I spec documents (8 MD files)
-│   ├── hardware_patterns/       # Verilog patterns and common bugs
-│   └── reference_rtl/           # Minimal Ibex reference RTL
+├── app/
+│   ├── config.py                  # YAML config loader
+│   ├── retriever.py               # Dense-only FAISS retriever
+│   ├── bm25_index.py              # BM25 sparse keyword index
+│   ├── reranker.py                # Cross-encoder reranker
+│   ├── hybrid_retriever.py        # FAISS + BM25 + RRF + reranker
+│   ├── generator.py               # RTL generator with retry + validation
+│   ├── api.py                     # FastAPI backend
+│   ├── ui.py                      # Gradio interactive UI
+│   ├── evaluate.py                # Retrieval evaluation framework
+│   └── calibrate.py               # Auto-calibration (baseline → compare)
 ├── scripts/
-│   ├── chunk_corpus.py          # Chunk and enrich corpus documents
-│   ├── build_index.py           # Build FAISS vector index
-│   ├── retrieve.py              # Three-stage structured retrieval
-│   ├── generate_rtl.py          # RTL generation via Claude Haiku API
-│   └── utils.py                 # Chunking and enrichment utilities
+│   ├── chunk_corpus.py            # Semantic RTL + enriched markdown chunking
+│   ├── build_index.py             # FAISS index builder
+│   ├── generate_rtl_2.py          # RTL generation (dense retrieval)
+│   ├── generate_hybrid.py         # RTL generation (hybrid retrieval)
+│   └── utils.py                   # Chunking and RTL parsing utilities
+├── configs/
+│   └── config.yaml                # Centralized pipeline configuration
+├── corpus/
+│   ├── docs/                      # RV32I spec documents (8 markdown files)
+│   ├── hardware_patterns/         # Verilog design patterns and common bugs
+│   └── reference_rtl/             # Minimal Ibex reference RTL
 ├── outputs/
-│   ├── generated_rtl/           # Final generated SystemVerilog files
-│   └── retrieved_context/       # Saved retrieval contexts per module
-├── sim_main.cpp                 # Verilator testbench
-├── convert_hex_preserve_addr.py # Hex conversion with address preservation
-├── convert_hex_to_word.py       # Simple byte-to-word hex converter
-└── requirement.txt              # Python dependencies
+│   ├── generated_rtl_2/           # Generated SystemVerilog (dense)
+|   ├── retrieved_context_2/       # Saved retrieval contexts per module (dense)
+│   ├── generated_rtl_hybrid/      # Generated SystemVerilog (hybrid)
+|   └── retrieved_context_hybrid/  # Saved retrieval contexts per module (hybrid)   
+├── vectorstore/                   # FAISS index files
+├── convert_hex_preserve_addr.py   # Hex conversion with address preservation
+├── convert_hex_to_word.py         # Simple byte-to-word hex converter
+├── main.py                        # Entry point (api / ui / eval)
+├── Dockerfile                     # Container deployment
+├── sim_main.cpp                   # Verilator testbench
+├── requirements.txt               # Python dependencies
+└── README.md
 ```
 
----
+## Tech Stack
+
+- **Retrieval:** FAISS, BM25, LangChain, HuggingFace Embeddings (BGE)
+- **Reranking:** sentence-transformers (cross-encoder/ms-marco-MiniLM-L-6-v2)
+- **Generation:** Anthropic Claude API
+- **API:** FastAPI, Pydantic, Uvicorn
+- **UI:** Gradio
+- **Deployment:** Docker
+- **Validation:** Verilator, RISC-V ISA test suite
 
 ## Environment
 
@@ -220,3 +258,7 @@ rag-rv32i-rtl-gen/
 - Python: 3.10+
 - Verilator: 5.048
 - RISC-V toolchain: riscv64-unknown-elf-gcc 10.2.0
+
+## License
+
+MIT

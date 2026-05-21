@@ -1,0 +1,59 @@
+# ─── Python bytecode cache ───
+# Auto-generated .pyc files when you run Python scripts
+# Machine-specific, regenerated automatically — never commit these
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# ─── Virtual environment ───
+venv/
+.venv/
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.swp
+
+# ─── API keys ───
+.env
+
+# ─── Corpus (proprietary research data) ───
+corpus/
+
+# ─── Vector store (regenerated from corpus) ───
+vectorstore/
+
+# ─── Generated outputs (regeneratable) ───
+outputs/generated_rtl/
+outputs/retrieved_context/
+outputs/generated_rtl_2/
+outputs/retrieved_context_2/
+outputs/chunks.json
+
+# ─── Keep hybrid outputs (proof of pipeline results) ───
+# outputs/generated_rtl_hybrid/     ← PUSHED (generated SystemVerilog)
+# outputs/retrieved_context_hybrid/  ← PUSHED (retrieval context per module)
+
+# ─── Original scripts (corpus-specific, not for public repo) ───
+scripts/build_index.py
+scripts/chunk_corpus.py
+scripts/generate_rtl.py
+scripts/generate_rtl_2.py
+scripts/retrieve.py
+scripts/utils.py
+
+# ─── Simulation files ───
+sim_main.cpp
+obj_dir/
+*.vcd
+
+# ─── Misc ───
+submission_amit_chaudhari.md
+convert_hex_preserve_addr.py
+convert_hex_to_word.py
+requirement.txt
+
+# ─── OS ───
+.DS_Store
+Thumbs.db

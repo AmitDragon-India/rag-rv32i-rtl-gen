@@ -1,0 +1,852 @@
+TASK LABEL:
+rv32i_alu
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I ALU.
+
+Module name: rv32i_alu
+
+Interface:
+input  logic [31:0] operand_a
+input  logic [31:0] operand_b
+input  logic [3:0]  alu_op
+output logic [31:0] alu_result
+
+Use localparam for alu_op encoding.
+
+Coding constraints:
+- Pure combinational (always_comb only)
+- Default alu_result = 32'b0
+- Use unique case(alu_op)
+- Take alu_op encoding values from retrieved context
+
+
+RETRIEVAL MODE: hybrid (FAISS + BM25 + Reranker)
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I ALU.
+
+Module name: rv32i_alu
+
+Interface:
+input  logic [31:0] operand_a
+input  logic [31:0] operand_b
+input  logic [3:0]  alu_op
+output logic [31:0] alu_result
+
+Use localparam for alu_op encoding.
+
+Coding constraints:
+- Pure combinational (always_comb only)
+- Default alu_result = 32'b0
+- Use unique case(alu_op)
+- Take alu_op encoding values from retrieved context
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_4
+Source: 08_alu_spec
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Behavior
+
+- Use `always_comb` with `unique case (alu_op)`
+- Default `alu_result = 32'b0` at top of always_comb
+- ADD:  `operand_a + operand_b`
+- SUB:  `operand_a - operand_b`
+- AND:  `operand_a & operand_b`
+- OR:   `operand_a | operand_b`
+- XOR:  `operand_a ^ operand_b`
+- SLT:  `($signed(operand_a) < $signed(operand_b)) ? 32'd1 : 32'd0`
+- SLTU: `(operand_a < operand_b) ? 32'd1 : 32'd0`
+- SLL:  `operand_a << operand_b[4:0]`
+- SRL:  `operand_a >> operand_b[4:0]`
+- SRA:  `$signed(operand_a) >>> operand_b[4:0]`
+
+---
+
+
+[Context 2]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_23
+Source: 04_architecture
+Keywords: table reference specification
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+
+### Decoding Rules
+
+| Instruction       | opcode  | funct3 | funct7  | alu_op   |
+|-------------------|---------|--------|---------|----------|
+| ADD               | 0110011 | 000    | 0000000 | ALU_ADD  |
+| SUB               | 0110011 | 000    | 0100000 | ALU_SUB  |
+| AND               | 0110011 | 111    | 0000000 | ALU_AND  |
+| OR                | 0110011 | 110    | 0000000 | ALU_OR   |
+| XOR               | 0110011 | 100    | 0000000 | ALU_XOR  |
+| SLT               | 0110011 | 010    | 0000000 | ALU_SLT  |
+| SLTU              | 0110011 | 011    | 0000000 | ALU_SLTU |
+| SLL               | 0110011 | 001    | 0000000 | ALU_SLL  |
+| SRL               | 0110011 | 101    | 0000000 | ALU_SRL  |
+| SRA               | 0110011 | 101    | 0100000 | ALU_SRA  |
+| ADDI              | 0010011 | 000    | -       | ALU_ADD  |
+| SLTI              | 0010011 | 010    | -       | ALU_SLT  |
+| SLTIU             | 0010011 | 011    | -       | ALU_SLTU |
+| ANDI              | 0010011 | 111    | -       | ALU_AND  |
+| ORI               | 0010011 | 110    | -       | ALU_OR   |
+| XORI              | 0010011 | 100    | -       | ALU_XOR  |
+| SLLI              | 0010011 | 001    | 0000000 | ALU_SLL  |
+| SRLI              | 0010011 | 101    | 0000000 | ALU_SRL  |
+| SRAI              | 0010011 | 101    | 0100000 | ALU_SRA  |
+| Load/Store/AUIPC  | varies  | -      | -       | ALU_ADD  |
+
+
+[Context 3]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_6
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+
+[Context 4]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_2
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed less-than
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned less-than
+localparam logic [3:0] ALU_SLL  = 4'b0111;  // logical left shift
+localparam logic [3:0] ALU_SRL  = 4'b1000;  // logical right shift
+localparam logic [3:0] ALU_SRA  = 4'b1001;  // arithmetic right shift
+```
+
+---
+
+
+[Context 5]
+Source: corpus/reference_rtl/ibex_rtl_only/ibex_alu.sv
+Chunk ID: ibex_alu_rtl_27_0
+// MODULE: ibex_alu
+// BLOCK_TYPE: always_comb
+always_comb begin
+    result_o   = '0;
+
+    unique case (operator_i)
+      // Bitwise Logic Operations (negate: RV32B)
+      ALU_XOR,  ALU_XNOR,
+      ALU_OR,   ALU_ORN,
+      ALU_AND,  ALU_ANDN: result_o = bwlogic_result;
+
+      // Adder Operations
+      ALU_ADD,  ALU_SUB,
+      // RV32B
+      ALU_SH1ADD, ALU_SH2ADD,
+      ALU_SH3ADD: result_o = adder_result;
+
+      // Shift Operations
+      ALU_SLL,  ALU_SRL,
+      ALU_SRA,
+      // RV32B
+      ALU_SLO,  ALU_SRO: result_o = shift_result;
+
+      // Shuffle Operations (RV32B)
+      ALU_SHFL, ALU_UNSHFL: result_o = shuffle_result;
+
+      // Crossbar Permutation Operations (RV32B)
+      ALU_XPERM_N, ALU_XPERM_B, ALU_XPERM_H: result_o = xperm_result;
+
+      // Comparison Operations
+      ALU_EQ,   ALU_NE,
+      ALU_GE,   ALU_GEU,
+      ALU_LT,   ALU_LTU,
+      ALU_SLT,  ALU_SLTU: result_o = {31'h0,cmp_result};
+
+      // MinMax Operations (RV32B)
+      ALU_MIN,  ALU_MAX,
+      ALU_MINU, ALU_MAXU: result_o = minmax_result;
+
+      // Bitcount Operations (RV32B)
+      ALU_CLZ, ALU_CTZ,
+      ALU_CPOP: result_o = {26'h0, bitcnt_result};
+
+      // Pack Operations (RV32B)
+      ALU_PACK, ALU_PACKH,
+      ALU_PACKU: result_o = pack_result;
+
+      // Sign-Extend (RV32B)
+      ALU_SEXTB, ALU_SEXTH: result_o = sext_result;
+
+      // Ternary Bitmanip Operations (RV32B)
+      ALU_CMIX, ALU_CMOV,
+      ALU_FSL,  ALU_FSR,
+      // Rotate Shift (RV32B)
+      ALU_ROL, ALU_ROR,
+      // Cyclic Redundancy Checks (RV32B)
+      ALU_CRC32_W, ALU_CRC32C_W,
+      ALU_CRC32_H, ALU_CRC32C_H,
+      ALU_CRC32_B, ALU_CRC32C_B,
+      // Bit Compress / Decompress (RV32B)
+      ALU_BCOMPRESS, ALU_BDECOMPRESS: result_o = multicycle_result;
+
+      // Single-Bit Bitmanip Operations (RV32B)
+      ALU_BSET, ALU_BCLR,
+      ALU_BINV, ALU_BEXT: result_o = singlebit_result;
+
+      // General Reverse / Or-combine (RV32B)
+      ALU_GREV, ALU_GORC: result_o = rev_result;
+
+      // Bit Field Place (RV32B)
+      ALU_BFP: result_o = bfp_result;
+
+      // Carry-less Multiply Operations (RV32B)
+      ALU_CLMUL, ALU_CLMULR,
+      ALU_CLMULH: result_o = clmul_result;
+
+      default: ;
+    endcase
+  end
+
+  logic unused
+
+
+[Context 6]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_22
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+### alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned
+localparam logic [3:0] ALU_SLL  = 4'b0111;
+localparam logic [3:0] ALU_SRL  = 4'b1000;
+localparam logic [3:0] ALU_SRA  = 4'b1001;
+```
+
+
+[Context 7]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_7
+Source: 08_alu_spec
+
+### funct3 encoding for R-type and I-type
+
+```
+3'b000 = ADD/SUB/ADDI      (use funct7[5] for ADD vs SUB)
+3'b001 = SLL/SLLI
+3'b010 = SLT/SLTI
+3'b011 = SLTU/SLTIU
+3'b100 = XOR/XORI
+3'b101 = SRL/SRA/SRLI/SRAI (use funct7[5] for logical vs arithmetic)
+3'b110 = OR/ORI
+3'b111 = AND/ANDI
+```
+
+---
+
+
+[Context 8]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_3
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+
+[Context 9]
+Source: corpus/reference_rtl/ibex_rtl_only/ibex_decoder.sv
+Chunk ID: ibex_decoder_rtl_4_6
+end else begin
+                  use_rs3_d = 1'b0;
+                end
+              end
+              {2'b10, 3'b101}: begin
+                alu_operator_o   = ALU_FSR;  // fsr
+                alu_multicycle_o = 1'b1;
+                if (instr_first_cycle_i) begin
+                  use_rs3_d = 1'b1;
+                end else begin
+                  use_rs3_d = 1'b0;
+                end
+              end
+              default: ;
+            endcase
+          end
+        end else begin
+          unique case ({instr_alu[31:25], instr_alu[14:12]})
+            // RV32I ALU operations
+            {7'b000_0000, 3'b000}: alu_operator_o = ALU_ADD;   // Add
+            {7'b010_0000, 3'b000}: alu_operator_o = ALU_SUB;   // Sub
+            {7'b000_0000, 3'b010}: alu_operator_o = ALU_SLT;   // Set Lower Than
+            {7'b000_0000, 3'b011}: alu_operator_o = ALU_SLTU;  // Set Lower Than Unsigned
+            {7'b000_0000, 3'b100}: alu_operator_o = ALU_XOR;   // Xor
+            {7'b000_0000, 3'b110}: alu_operator_o = ALU_OR;    // Or
+            {7'b000_0000, 3'b111}: alu_operator_o = ALU_AND;   // And
+            {7'b000_0000, 3'b001}: alu_operator_o = ALU_SLL;   // Shift Left Logical
+            {7'b000_0000, 3'b101}: alu_operator_o = ALU_SRL;   // Shift Right Logical
+            {7'b010_0000, 3'b101}: alu_operator_o = ALU_SRA;   // Shift Right Arithmetic
+
+            // RV32B ALU Operations
+            {7'b011_0000, 3'b001}: begin
+              if (RV32B != RV32BNone) begin
+                alu_operator_o = ALU_ROL;
+                alu_multicycle_o = 1'b1;
+              end
+            end
+            {7'b011_0000, 3'b101}: begin
+              if (RV32B != RV32BNone) begin
+                alu_operator_o = ALU_ROR;
+                alu_multicycle_o = 1'b1;
+              end
+            end
+
+            {7'b000_0101, 3'b100}: if (RV32B != RV32BNone) alu_operator_o = ALU_MIN;
+            {7'b000_0101, 3'b110}: if (RV32B != RV32BNone) alu_operator_o = ALU_MAX;
+            {7'b000_0101, 3'b101}: if (RV32B != RV32BNone) alu_operator_o = ALU_MINU;
+            {7'b000_0101, 3'b111}: if (RV32B != RV32BNone) alu_operator_o = ALU_MAXU;
+
+            {7'b000_0100, 3'b100}
+
+
+[Context 10]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_5
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+
+[Context 11]
+Source: corpus/docs/04_architecture.md
+Chunk ID: 04_architecture_sec_5
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+
+[Context 12]
+Source: corpus/docs/08_alu_spec.md
+Chunk ID: 08_alu_spec_sec_8
+Source: 08_alu_spec
+
+## Common Bugs
+
+- Using `>>` instead of `>>>` for SRA — `>>` is always logical shift in SystemVerilog
+- Forgetting `$signed()` cast for SLT and SRA
+- Not masking shift amount to 5 bits — always use `operand_b[4:0]` for shifts
+- Confusing funct7[5]=0 (ADD, SRL) with funct7[5]=1 (SUB, SRA)
+
+
+[Context 13]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_9
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 2-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        1'b0: y = a;
+        1'b1: y = b;
+        default: y = '0;
+    endcase
+end
+```
+
+
+[Context 14]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_10
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_4', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Behavior
+
+- Use `always_comb` with `unique case (alu_op)`
+- Default `alu_result = 32'b0` at top of always_comb
+- ADD:  `operand_a + operand_b`
+- SUB:  `operand_a - operand_b`
+- AND:  `operand_a & operand_b`
+- OR:   `operand_a | operand_b`
+- XOR:  `operand_a ^ operand_b`
+- SLT:  `($signed(operand_a) < $signed(operand_b)) ? 32'd1 : 32'd0`
+- SLTU: `(operand_a < operand_b) ? 32'd1 : 32'd0`
+- SLL:  `operand_a << operand_b[4:0]`
+- SRL:  `operand_a >> operand_b[4:0]`
+- SRA:  `$signed(operand_a) >>> operand_b[4:0]`
+
+---
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_23', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: table reference specification
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+
+### Decoding Rules
+
+| Instruction       | opcode  | funct3 | funct7  | alu_op   |
+|-------------------|---------|--------|---------|----------|
+| ADD               | 0110011 | 000    | 0000000 | ALU_ADD  |
+| SUB               | 0110011 | 000    | 0100000 | ALU_SUB  |
+| AND               | 0110011 | 111    | 0000000 | ALU_AND  |
+| OR                | 0110011 | 110    | 0000000 | ALU_OR   |
+| XOR               | 0110011 | 100    | 0000000 | ALU_XOR  |
+| SLT               | 0110011 | 010    | 0000000 | ALU_SLT  |
+| SLTU              | 0110011 | 011    | 0000000 | ALU_SLTU |
+| SLL               | 0110011 | 001    | 0000000 | ALU_SLL  |
+| SRL               | 0110011 | 101    | 0000000 | ALU_SRL  |
+| SRA               | 0110011 | 101    | 0100000 | ALU_SRA  |
+| ADDI              | 0010011 | 000    | -       | ALU_ADD  |
+| SLTI              | 0010011 | 010    | -       | ALU_SLT  |
+| SLTIU             | 0010011 | 011    | -       | ALU_SLTU |
+| ANDI              | 0010011 | 111    | -       | ALU_AND  |
+| ORI               | 0010011 | 110    | -       | ALU_OR   |
+| XORI              | 0010011 | 100    | -       | ALU_XOR  |
+| SLLI              | 0010011 | 001    | 0000000 | ALU_SLL  |
+| SRLI              | 0010011 | 101    | 0000000 | ALU_SRL  |
+| SRAI              | 0010011 | 101    | 0100000 | ALU_SRA  |
+| Load/Store/AUIPC  | varies  | -      | -       | ALU_ADD  |
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_6', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: RV32I opcode localparam instruction type
+Keywords: RV32I ALU operation alu_op encoding
+Keywords: rv32i_ex_stage execute stage forwarding redirect ALU branch jump
+Keywords: RV32I forwarding unit EX MEM WB operand forward select store
+
+## rv32i_alu_control Behavior
+
+- Default `alu_op = ALU_ADD`
+- Use `unique case (opcode)` outer decode
+- For R_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish ADD/SUB and SRL/SRA
+- For I_TYPE: use nested `unique case (funct3)`, use `funct7[5]` to distinguish SRLI/SRAI
+- LOAD, STORE, JAL, JALR, LUI, AUIPC: `alu_op = ALU_ADD`
+- BRANCH: `alu_op = ALU_SUB` (comparison done in EX stage using opA_fwd/opB_fwd directly)
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_2', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed less-than
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned less-than
+localparam logic [3:0] ALU_SLL  = 4'b0111;  // logical left shift
+localparam logic [3:0] ALU_SRL  = 4'b1000;  // logical right shift
+localparam logic [3:0] ALU_SRA  = 4'b1001;  // arithmetic right shift
+```
+
+---
+
+================================================================================
+
+[Context 5] {'source': 'corpus/reference_rtl/ibex_rtl_only/ibex_alu.sv', 'chunk_id': 'ibex_alu_rtl_27_0', 'type': 'rtl'}
+// MODULE: ibex_alu
+// BLOCK_TYPE: always_comb
+always_comb begin
+    result_o   = '0;
+
+    unique case (operator_i)
+      // Bitwise Logic Operations (negate: RV32B)
+      ALU_XOR,  ALU_XNOR,
+      ALU_OR,   ALU_ORN,
+      ALU_AND,  ALU_ANDN: result_o = bwlogic_result;
+
+      // Adder Operations
+      ALU_ADD,  ALU_SUB,
+      // RV32B
+      ALU_SH1ADD, ALU_SH2ADD,
+      ALU_SH3ADD: result_o = adder_result;
+
+      // Shift Operations
+      ALU_SLL,  ALU_SRL,
+      ALU_SRA,
+      // RV32B
+      ALU_SLO,  ALU_SRO: result_o = shift_result;
+
+      // Shuffle Operations (RV32B)
+      ALU_SHFL, ALU_UNSHFL: result_o = shuffle_result;
+
+      // Crossbar Permutation Operations (RV32B)
+      ALU_XPERM_N, ALU_XPERM_B, ALU_XPERM_H: result_o = xperm_result;
+
+      // Comparison Operations
+      ALU_EQ,   ALU_NE,
+      ALU_GE,   ALU_GEU,
+      ALU_LT,   ALU_LTU,
+      ALU_SLT,  ALU_SLTU: result_o = {31'h0,cmp_result};
+
+      // MinMax Operations (RV32B)
+      ALU_MIN,  ALU_MAX,
+      ALU_MINU, ALU_MAXU: result_o = minmax_result;
+
+      // Bitcount Operations (RV32B)
+      ALU_CLZ, ALU_CTZ,
+      ALU_CPOP: result_o = {26'h0, bitcnt_result};
+
+      // Pack Operations (RV32B)
+      ALU_PACK, ALU_PACKH,
+      ALU_PACKU: result_o = pack_result;
+
+      // Sign-Extend (RV32B)
+      ALU_SEXTB, ALU_SEXTH: result_o = sext_result;
+
+      // Ternary Bitmanip Operations (RV32B)
+      ALU_CMIX, ALU_CMOV,
+      ALU_FSL,  ALU_FSR,
+      // Rotate Shift (RV32B)
+      ALU_ROL, ALU_ROR,
+      // Cyclic Redundancy Checks (RV32B)
+      ALU_CRC32_W, ALU_CRC32C_W,
+      ALU_CRC32_H, ALU_CRC32C_H,
+      ALU_CRC32_B, ALU_CRC32C_B,
+      // Bit Compress / Decompress (RV32B)
+      ALU_BCOMPRESS, ALU_BDECOMPRESS: result_o = multicycle_result;
+
+      // Single-Bit Bitmanip Operations (RV32B)
+      ALU_BSET, ALU_BCLR,
+      ALU_BINV, ALU_BEXT: result_o = singlebit_result;
+
+      // General Reverse / Or-combine (RV32B)
+      ALU_GREV, ALU_GORC: result_o = rev_result;
+
+      // Bit Field Place (RV32B)
+      ALU_BFP: result_o = bfp_result;
+
+      // Carry-less Multiply Operations (RV32B)
+      ALU_CLMUL, ALU_CLMULR,
+      ALU_CLMULH: result_o = clmul_result;
+
+      default: ;
+    endcase
+  end
+
+  logic unused
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_22', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+### alu_op Encoding
+
+```systemverilog
+localparam logic [3:0] ALU_ADD  = 4'b0000;
+localparam logic [3:0] ALU_SUB  = 4'b0001;
+localparam logic [3:0] ALU_AND  = 4'b0010;
+localparam logic [3:0] ALU_OR   = 4'b0011;
+localparam logic [3:0] ALU_XOR  = 4'b0100;
+localparam logic [3:0] ALU_SLT  = 4'b0101;  // signed
+localparam logic [3:0] ALU_SLTU = 4'b0110;  // unsigned
+localparam logic [3:0] ALU_SLL  = 4'b0111;
+localparam logic [3:0] ALU_SRL  = 4'b1000;
+localparam logic [3:0] ALU_SRA  = 4'b1001;
+```
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_7', 'type': 'markdown'}
+Source: 08_alu_spec
+
+### funct3 encoding for R-type and I-type
+
+```
+3'b000 = ADD/SUB/ADDI      (use funct7[5] for ADD vs SUB)
+3'b001 = SLL/SLLI
+3'b010 = SLT/SLTI
+3'b011 = SLTU/SLTIU
+3'b100 = XOR/XORI
+3'b101 = SRL/SRA/SRLI/SRAI (use funct7[5] for logical vs arithmetic)
+3'b110 = OR/ORI
+3'b111 = AND/ANDI
+```
+
+---
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_3', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu Interface
+
+```systemverilog
+module rv32i_alu (
+    input  logic [31:0] operand_a,
+    input  logic [31:0] operand_b,
+    input  logic [3:0]  alu_op,
+    output logic [31:0] alu_result
+);
+```
+
+================================================================================
+
+[Context 9] {'source': 'corpus/reference_rtl/ibex_rtl_only/ibex_decoder.sv', 'chunk_id': 'ibex_decoder_rtl_4_6', 'type': 'rtl'}
+end else begin
+                  use_rs3_d = 1'b0;
+                end
+              end
+              {2'b10, 3'b101}: begin
+                alu_operator_o   = ALU_FSR;  // fsr
+                alu_multicycle_o = 1'b1;
+                if (instr_first_cycle_i) begin
+                  use_rs3_d = 1'b1;
+                end else begin
+                  use_rs3_d = 1'b0;
+                end
+              end
+              default: ;
+            endcase
+          end
+        end else begin
+          unique case ({instr_alu[31:25], instr_alu[14:12]})
+            // RV32I ALU operations
+            {7'b000_0000, 3'b000}: alu_operator_o = ALU_ADD;   // Add
+            {7'b010_0000, 3'b000}: alu_operator_o = ALU_SUB;   // Sub
+            {7'b000_0000, 3'b010}: alu_operator_o = ALU_SLT;   // Set Lower Than
+            {7'b000_0000, 3'b011}: alu_operator_o = ALU_SLTU;  // Set Lower Than Unsigned
+            {7'b000_0000, 3'b100}: alu_operator_o = ALU_XOR;   // Xor
+            {7'b000_0000, 3'b110}: alu_operator_o = ALU_OR;    // Or
+            {7'b000_0000, 3'b111}: alu_operator_o = ALU_AND;   // And
+            {7'b000_0000, 3'b001}: alu_operator_o = ALU_SLL;   // Shift Left Logical
+            {7'b000_0000, 3'b101}: alu_operator_o = ALU_SRL;   // Shift Right Logical
+            {7'b010_0000, 3'b101}: alu_operator_o = ALU_SRA;   // Shift Right Arithmetic
+
+            // RV32B ALU Operations
+            {7'b011_0000, 3'b001}: begin
+              if (RV32B != RV32BNone) begin
+                alu_operator_o = ALU_ROL;
+                alu_multicycle_o = 1'b1;
+              end
+            end
+            {7'b011_0000, 3'b101}: begin
+              if (RV32B != RV32BNone) begin
+                alu_operator_o = ALU_ROR;
+                alu_multicycle_o = 1'b1;
+              end
+            end
+
+            {7'b000_0101, 3'b100}: if (RV32B != RV32BNone) alu_operator_o = ALU_MIN;
+            {7'b000_0101, 3'b110}: if (RV32B != RV32BNone) alu_operator_o = ALU_MAX;
+            {7'b000_0101, 3'b101}: if (RV32B != RV32BNone) alu_operator_o = ALU_MINU;
+            {7'b000_0101, 3'b111}: if (RV32B != RV32BNone) alu_operator_o = ALU_MAXU;
+
+            {7'b000_0100, 3'b100}
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_5', 'type': 'markdown'}
+Source: 08_alu_spec
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I ALU operation alu_op encoding
+
+## rv32i_alu_control Interface
+
+```systemverilog
+module rv32i_alu_control (
+    input  logic [6:0] opcode,
+    input  logic [2:0] funct3,
+    input  logic [6:0] funct7,
+    output logic [3:0] alu_op
+);
+```
+
+================================================================================
+
+[Context 11] {'source': 'corpus/docs/04_architecture.md', 'chunk_id': '04_architecture_sec_5', 'type': 'markdown'}
+Source: 04_architecture
+Keywords: RV32I ALU operation alu_op encoding
+
+### Does NOT
+- Perform ALU operations
+- Access memory
+- Update PC
+- Resolve branches or jumps
+- Generate `alu_op` (handled by a separate ALU control block)
+
+================================================================================
+
+[Context 12] {'source': 'corpus/docs/08_alu_spec.md', 'chunk_id': '08_alu_spec_sec_8', 'type': 'markdown'}
+Source: 08_alu_spec
+
+## Common Bugs
+
+- Using `>>` instead of `>>>` for SRA — `>>` is always logical shift in SystemVerilog
+- Forgetting `$signed()` cast for SLT and SRA
+- Not masking shift amount to 5 bits — always use `operand_b[4:0]` for shifts
+- Confusing funct7[5]=0 (ADD, SRL) with funct7[5]=1 (SUB, SRA)
+
+================================================================================
+
+[Context 13] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_9', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 2-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        1'b0: y = a;
+        1'b1: y = b;
+        default: y = '0;
+    endcase
+end
+```
+
+================================================================================
+
+[Context 14] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_10', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### 4-input Mux
+
+```systemverilog
+always_comb begin
+    unique case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+        default: y = '0;
+    endcase
+end
+```
+
+Notes:
+- Use `unique case` for decoder and mux logic to enable tool warnings on overlap
+- Always include a `default` to cover undefined states
+
+---
+
+================================================================================
+

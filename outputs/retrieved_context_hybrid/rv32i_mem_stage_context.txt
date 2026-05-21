@@ -1,0 +1,757 @@
+TASK LABEL:
+rv32i_mem_stage
+
+TASK:
+
+Generate a synthesizable SystemVerilog module for an RV32I Memory Access (MEM) stage.
+
+Module name: rv32i_mem_stage
+
+Interface:
+input  logic [31:0] alu_result, store_data, pc_plus4_in, imm_u_in
+input  logic        mem_read, mem_write
+input  logic [2:0]  funct3
+input  logic [1:0]  wb_sel
+input  logic        reg_write
+input  logic [4:0]  rd_in
+output logic [31:0] dmem_addr, dmem_wdata
+output logic [3:0]  dmem_byte_en
+output logic        dmem_we, dmem_re
+input  logic [31:0] dmem_rdata
+output logic [31:0] pc_plus4_out, imm_u_out, mem_rdata_out, alu_result_out
+output logic        reg_write_out
+output logic [4:0]  rd_out
+output logic [1:0]  wb_sel_out
+
+Coding constraints:
+- Use always_comb only
+- Use byte_off = alu_result[1:0] for sub-word addressing
+- Use unique case for store and load funct3
+- All outputs must have safe defaults
+- Take byte_off encoding, byte enable, sign/zero extension from retrieved context
+
+
+RETRIEVAL MODE: hybrid (FAISS + BM25 + Reranker)
+
+PROMPT:
+You are an expert RTL generation assistant specializing in RV32I processor design.
+
+Task:
+
+Generate a synthesizable SystemVerilog module for an RV32I Memory Access (MEM) stage.
+
+Module name: rv32i_mem_stage
+
+Interface:
+input  logic [31:0] alu_result, store_data, pc_plus4_in, imm_u_in
+input  logic        mem_read, mem_write
+input  logic [2:0]  funct3
+input  logic [1:0]  wb_sel
+input  logic        reg_write
+input  logic [4:0]  rd_in
+output logic [31:0] dmem_addr, dmem_wdata
+output logic [3:0]  dmem_byte_en
+output logic        dmem_we, dmem_re
+input  logic [31:0] dmem_rdata
+output logic [31:0] pc_plus4_out, imm_u_out, mem_rdata_out, alu_result_out
+output logic        reg_write_out
+output logic [4:0]  rd_out
+output logic [1:0]  wb_sel_out
+
+Coding constraints:
+- Use always_comb only
+- Use byte_off = alu_result[1:0] for sub-word addressing
+- Use unique case for store and load funct3
+- All outputs must have safe defaults
+- Take byte_off encoding, byte enable, sign/zero extension from retrieved context
+
+
+Retrieved context:
+[Context 1]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_21
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Load (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+LB  (funct3=000): sign-extend byte at byte_off position
+LBU (funct3=100): zero-extend byte at byte_off position
+LH  (funct3=001): sign-extend halfword (lower if byte_off[1]=0, upper if byte_off[1]=1)
+LHU (funct3=101): zero-extend halfword
+LW  (funct3=010): full 32-bit word (aligned)
+```
+
+
+[Context 2]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_35
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LBU
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 100
+- format: lbu rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = zext(M[x[rs1] + sext(imm)][7:0])
+- note: Zero-extends byte, does NOT sign-extend
+
+
+[Context 3]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_32
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LB
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 000
+- format: lb rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = sext(M[x[rs1] + sext(imm)][7:0])
+
+
+[Context 4]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_20
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Store (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+SB (funct3=000): dmem_byte_en = 4'b0001 << byte_off
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SH (funct3=001): dmem_byte_en = byte_off[1] ? 4'b1100 : 4'b0011
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SW (funct3=010): dmem_byte_en = 4'b1111
+                 dmem_wdata   = store_data
+```
+
+
+[Context 5]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_36
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LHU
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 101
+- format: lhu rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = zext(M[x[rs1] + sext(imm)][15:0])
+- note: Zero-extends halfword, does NOT sign-extend
+
+---
+
+
+[Context 6]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_33
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LH
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 001
+- format: lh rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = sext(M[x[rs1] + sext(imm)][15:0])
+
+
+[Context 7]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_34
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LW
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 010
+- format: lw rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = M[x[rs1] + sext(imm)][31:0]
+
+
+[Context 8]
+Source: corpus/docs/10_top_integration.md
+Chunk ID: 10_top_integration_sec_10
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## Data Memory (inside rv32i_top)
+
+```systemverilog
+logic [31:0] dmem [0:MEM_DEPTH-1];
+
+// Synchronous byte-enable write — byte enable computed by MEM stage
+always_ff @(posedge clk) begin
+    if (dmem_we) begin
+        if (dmem_byte_en[0]) dmem[dmem_addr[31:2]][7:0]   <= dmem_wdata[7:0];
+        if (dmem_byte_en[1]) dmem[dmem_addr[31:2]][15:8]  <= dmem_wdata[15:8];
+        if (dmem_byte_en[2]) dmem[dmem_addr[31:2]][23:16] <= dmem_wdata[23:16];
+        if (dmem_byte_en[3]) dmem[dmem_addr[31:2]][31:24] <= dmem_wdata[31:24];
+    end
+end
+
+// Asynchronous read
+assign dmem_rdata = dmem[dmem_addr[31:2]];
+```
+
+Notes:
+- dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re are outputs of rv32i_mem_stage
+- dmem_rdata is input to rv32i_mem_stage
+
+---
+
+
+[Context 9]
+Source: corpus/docs/03_pipeline_stages.md
+Chunk ID: 03_pipeline_stages_sec_23
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### Limitation
+Misaligned word loads crossing a 32-bit boundary are not supported. LW requires word-aligned address.
+
+---
+
+
+[Context 10]
+Source: corpus/docs/02_Instruction.md
+Chunk ID: 02_Instruction_sec_39
+Source: 02_Instruction
+Keywords: table reference specification
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## SH
+- category: store
+- type: S-type
+- opcode: 0100011
+- funct3: 001
+- format: sh rs2, imm(rs1)
+- encoding: [31:25]=imm[11:5] | [24:20]=rs2 | [19:15]=rs1 | [14:12]=funct3 | [11:7]=imm[4:0] | [6:0]=opcode
+- imm = {{20{instr[31]}}, instr[31:25], instr[11:7]}
+- operation: M[x[rs1] + sext(imm)][15:0] = x[rs2][15:0]
+
+
+[Context 11]
+Source: corpus/reference_rtl/ibex_rtl_only/ibex_decoder.sv
+Chunk ID: ibex_decoder_rtl_3_1
+E_BRANCH: begin // Branch
+        branch_in_dec_o       = 1'b1;
+        // Check branch condition selection
+        unique case (instr[14:12])
+          3'b000,
+          3'b001,
+          3'b100,
+          3'b101,
+          3'b110,
+          3'b111:  illegal_insn = 1'b0;
+          default: illegal_insn = 1'b1;
+        endcase
+
+        rf_ren_a_o = 1'b1;
+        rf_ren_b_o = 1'b1;
+      end
+
+      ////////////////
+      // Load/store //
+      ////////////////
+
+      OPCODE_STORE: begin
+        rf_ren_a_o         = 1'b1;
+        rf_ren_b_o         = 1'b1;
+        data_req_o         = 1'b1;
+        data_we_o          = 1'b1;
+
+        if (instr[14]) begin
+          illegal_insn = 1'b1;
+        end
+
+        // store size
+        unique case (instr[13:12])
+          2'b00:   data_type_o  = 2'b10; // sb
+          2'b01:   data_type_o  = 2'b01; // sh
+          2'b10:   data_type_o  = 2'b00; // sw
+          default: illegal_insn = 1'b1;
+        endcase
+      end
+
+      OPCODE_LOAD: begin
+        rf_ren_a_o          = 1'b1;
+        data_req_o          = 1'b1;
+        data_type_o         = 2'b00;
+
+        // sign/zero extension
+        data_sign_extension_o = ~instr[14];
+
+        // load size
+        unique case (instr[13:12])
+          2'b00: data_type_o = 2'b10; // lb(u)
+          2'b01: data_type_o = 2'b01; // lh(u)
+          2'b10: begin
+            data_type_o = 2'b00;      // lw
+            if (instr[14]) begin
+              illegal_insn = 1'b1;    // lwu does not exist
+            end
+          end
+          default: begin
+            illegal_insn = 1'b1;
+          end
+        endcase
+      end
+
+      /////////
+      // ALU //
+      /////////
+
+      OPCODE_LUI: begin  // Load Upper Immediate
+        rf_we            = 1'b1;
+      end
+
+      OPCODE_AUIPC: begin  // Add Upper Immediate to PC
+        rf_we            = 1'b1;
+      end
+
+      OPCODE_OP_IMM: begin // Register-Immediate ALU Operations
+        rf_ren_a_o       = 1'b1;
+        rf_we            = 1'b1;
+
+        unique case (instr[14:12])
+          3'b000,
+          3'b010,
+          3'b011,
+          3'b100,
+          3'b110,
+          3'b111: illegal_insn = 1'b0;
+
+          3'b001: begin
+            unique
+
+
+[Context 12]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_3
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+
+[Context 13]
+Source: corpus/hardware_patterns/05_verilog_design_patterns.md
+Chunk ID: 05_verilog_design_patterns_sec_13
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+
+Instructions:
+- Generate synthesizable SystemVerilog RTL only.
+- Follow RV32I behavior strictly from the provided context.
+- Do not invent unsupported instructions or signals.
+- Use non-blocking assignments (<=) in always_ff sequential blocks.
+- Use blocking assignments (=) in always_comb combinational blocks.
+- Always assign safe default values to all outputs at the top of always_comb.
+- Use localparam for all opcode and control signal constants.
+- Keep module naming exactly as specified in the task.
+- Return only one complete SystemVerilog module.
+- Do not include any explanation outside the code.
+
+Return format:
+Return only SystemVerilog code starting with 'module' and ending with 'endmodule'.
+
+RETRIEVED DOCUMENTS:
+
+[Context 1] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_21', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Load (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+LB  (funct3=000): sign-extend byte at byte_off position
+LBU (funct3=100): zero-extend byte at byte_off position
+LH  (funct3=001): sign-extend halfword (lower if byte_off[1]=0, upper if byte_off[1]=1)
+LHU (funct3=101): zero-extend halfword
+LW  (funct3=010): full 32-bit word (aligned)
+```
+
+================================================================================
+
+[Context 2] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_35', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LBU
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 100
+- format: lbu rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = zext(M[x[rs1] + sext(imm)][7:0])
+- note: Zero-extends byte, does NOT sign-extend
+
+================================================================================
+
+[Context 3] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_32', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LB
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 000
+- format: lb rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = sext(M[x[rs1] + sext(imm)][7:0])
+
+================================================================================
+
+[Context 4] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_20', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+
+### Store (byte-addressed with byte_off)
+
+```
+byte_off = alu_result[1:0]
+
+SB (funct3=000): dmem_byte_en = 4'b0001 << byte_off
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SH (funct3=001): dmem_byte_en = byte_off[1] ? 4'b1100 : 4'b0011
+                 dmem_wdata   = store_data << (8 * byte_off)
+
+SW (funct3=010): dmem_byte_en = 4'b1111
+                 dmem_wdata   = store_data
+```
+
+================================================================================
+
+[Context 5] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_36', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LHU
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 101
+- format: lhu rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = zext(M[x[rs1] + sext(imm)][15:0])
+- note: Zero-extends halfword, does NOT sign-extend
+
+---
+
+================================================================================
+
+[Context 6] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_33', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LH
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 001
+- format: lh rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = sext(M[x[rs1] + sext(imm)][15:0])
+
+================================================================================
+
+[Context 7] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_34', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## LW
+- category: load
+- type: I-type
+- opcode: 0000011
+- funct3: 010
+- format: lw rd, imm(rs1)
+- encoding: [31:20]=imm[11:0] | [19:15]=rs1 | [14:12]=funct3 | [11:7]=rd | [6:0]=opcode
+- operation: x[rd] = M[x[rs1] + sext(imm)][31:0]
+
+================================================================================
+
+[Context 8] {'source': 'corpus/docs/10_top_integration.md', 'chunk_id': '10_top_integration_sec_10', 'type': 'markdown'}
+Source: 10_top_integration
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+Keywords: rv32i_mem_stage memory access stage interface dmem byte_off load store
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## Data Memory (inside rv32i_top)
+
+```systemverilog
+logic [31:0] dmem [0:MEM_DEPTH-1];
+
+// Synchronous byte-enable write — byte enable computed by MEM stage
+always_ff @(posedge clk) begin
+    if (dmem_we) begin
+        if (dmem_byte_en[0]) dmem[dmem_addr[31:2]][7:0]   <= dmem_wdata[7:0];
+        if (dmem_byte_en[1]) dmem[dmem_addr[31:2]][15:8]  <= dmem_wdata[15:8];
+        if (dmem_byte_en[2]) dmem[dmem_addr[31:2]][23:16] <= dmem_wdata[23:16];
+        if (dmem_byte_en[3]) dmem[dmem_addr[31:2]][31:24] <= dmem_wdata[31:24];
+    end
+end
+
+// Asynchronous read
+assign dmem_rdata = dmem[dmem_addr[31:2]];
+```
+
+Notes:
+- dmem_addr, dmem_wdata, dmem_byte_en, dmem_we, dmem_re are outputs of rv32i_mem_stage
+- dmem_rdata is input to rv32i_mem_stage
+
+---
+
+================================================================================
+
+[Context 9] {'source': 'corpus/docs/03_pipeline_stages.md', 'chunk_id': '03_pipeline_stages_sec_23', 'type': 'markdown'}
+Source: 03_pipeline_stages
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+### Limitation
+Misaligned word loads crossing a 32-bit boundary are not supported. LW requires word-aligned address.
+
+---
+
+================================================================================
+
+[Context 10] {'source': 'corpus/docs/02_Instruction.md', 'chunk_id': '02_Instruction_sec_39', 'type': 'markdown'}
+Source: 02_Instruction
+Keywords: table reference specification
+Keywords: RV32I memory load store byte enable sign extension byte_off sub-word dmem
+
+## SH
+- category: store
+- type: S-type
+- opcode: 0100011
+- funct3: 001
+- format: sh rs2, imm(rs1)
+- encoding: [31:25]=imm[11:5] | [24:20]=rs2 | [19:15]=rs1 | [14:12]=funct3 | [11:7]=imm[4:0] | [6:0]=opcode
+- imm = {{20{instr[31]}}, instr[31:25], instr[11:7]}
+- operation: M[x[rs1] + sext(imm)][15:0] = x[rs2][15:0]
+
+================================================================================
+
+[Context 11] {'source': 'corpus/reference_rtl/ibex_rtl_only/ibex_decoder.sv', 'chunk_id': 'ibex_decoder_rtl_3_1', 'type': 'rtl'}
+E_BRANCH: begin // Branch
+        branch_in_dec_o       = 1'b1;
+        // Check branch condition selection
+        unique case (instr[14:12])
+          3'b000,
+          3'b001,
+          3'b100,
+          3'b101,
+          3'b110,
+          3'b111:  illegal_insn = 1'b0;
+          default: illegal_insn = 1'b1;
+        endcase
+
+        rf_ren_a_o = 1'b1;
+        rf_ren_b_o = 1'b1;
+      end
+
+      ////////////////
+      // Load/store //
+      ////////////////
+
+      OPCODE_STORE: begin
+        rf_ren_a_o         = 1'b1;
+        rf_ren_b_o         = 1'b1;
+        data_req_o         = 1'b1;
+        data_we_o          = 1'b1;
+
+        if (instr[14]) begin
+          illegal_insn = 1'b1;
+        end
+
+        // store size
+        unique case (instr[13:12])
+          2'b00:   data_type_o  = 2'b10; // sb
+          2'b01:   data_type_o  = 2'b01; // sh
+          2'b10:   data_type_o  = 2'b00; // sw
+          default: illegal_insn = 1'b1;
+        endcase
+      end
+
+      OPCODE_LOAD: begin
+        rf_ren_a_o          = 1'b1;
+        data_req_o          = 1'b1;
+        data_type_o         = 2'b00;
+
+        // sign/zero extension
+        data_sign_extension_o = ~instr[14];
+
+        // load size
+        unique case (instr[13:12])
+          2'b00: data_type_o = 2'b10; // lb(u)
+          2'b01: data_type_o = 2'b01; // lh(u)
+          2'b10: begin
+            data_type_o = 2'b00;      // lw
+            if (instr[14]) begin
+              illegal_insn = 1'b1;    // lwu does not exist
+            end
+          end
+          default: begin
+            illegal_insn = 1'b1;
+          end
+        endcase
+      end
+
+      /////////
+      // ALU //
+      /////////
+
+      OPCODE_LUI: begin  // Load Upper Immediate
+        rf_we            = 1'b1;
+      end
+
+      OPCODE_AUIPC: begin  // Add Upper Immediate to PC
+        rf_we            = 1'b1;
+      end
+
+      OPCODE_OP_IMM: begin // Register-Immediate ALU Operations
+        rf_ren_a_o       = 1'b1;
+        rf_we            = 1'b1;
+
+        unique case (instr[14:12])
+          3'b000,
+          3'b010,
+          3'b011,
+          3'b100,
+          3'b110,
+          3'b111: illegal_insn = 1'b0;
+
+          3'b001: begin
+            unique
+
+================================================================================
+
+[Context 12] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_3', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+### Register with Enable (Stall Support)
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q <= '0;
+    else if (en)
+        q <= d;
+end
+```
+
+Notes:
+- `en = 0` -> register holds its current value (stall condition)
+- `en = 1` -> register captures new input
+
+---
+
+================================================================================
+
+[Context 13] {'source': 'corpus/hardware_patterns/05_verilog_design_patterns.md', 'chunk_id': '05_verilog_design_patterns_sec_13', 'type': 'markdown'}
+Source: 05_verilog_design_patterns
+Keywords: SystemVerilog RTL code example
+Keywords: RV32I pipeline stall flush hazard control
+Keywords: RTL bug fix always_ff always_comb blocking non-blocking latch
+
+## 8. Synchronous Reset Convention (Alternative)
+
+Use asynchronous reset (shown in Section 1) for most pipeline registers.  
+Use synchronous reset only when required by the target technology:
+
+```systemverilog
+always_ff @(posedge clk) begin
+    if (rst)
+        q <= '0;
+    else
+        q <= d;
+end
+```
+
+Notes:
+- Asynchronous active-low reset (`negedge rst_n`) is the preferred convention for RV32I cores
+- Synchronous reset may be required for certain FPGA primitives
+
+---
+
+================================================================================
+

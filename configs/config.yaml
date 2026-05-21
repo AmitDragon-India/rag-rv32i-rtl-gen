@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────
+# RAG-RV32I RTL Generation — Configuration
+# ─────────────────────────────────────────────
+
+# Embedding model
+embedding:
+  model_name: "BAAI/bge-base-en-v1.5"
+
+# Vector store
+vectorstore:
+  type: "faiss"
+  path: "vectorstore/faiss_index"
+
+# Corpus
+corpus:
+  dir: "corpus"
+  chunks_file: "outputs/chunks.json"
+  supported_extensions: [".md", ".v", ".sv"]
+  max_rtl_chunks_per_file: 60
+  chunk_max_chars: 2200
+  chunk_overlap: 250
+
+# Retrieval
+retrieval:
+  default_k_rtl: 3
+  spec_candidates_k: 30
+  pattern_candidates_k: 10
+  max_spec_docs: 10
+  max_pattern_docs: 2
+  min_chunk_length: 200
+
+  # Spec source files (priority order)
+  spec_sources:
+    - "04_architecture.md"
+    - "02_Instruction.md"
+    - "01_formats.md"
+    - "08_alu_spec.md"
+    - "07_regfile_spec.md"
+    - "03_pipeline_stages.md"
+    - "09_hazard_control.md"
+    - "10_top_integration.md"
+
+  pattern_sources:
+    - "05_verilog_design_patterns.md"
+    - "06_common_rtl_bugs_and_fixes.md"
+
+# Hybrid search
+hybrid:
+  mode: "hybrid"                 # "dense_only", "sparse_only", "hybrid"
+  rrf_k: 60                     # RRF constant (standard = 60)
+  enable_reranker: true
+
+# Reranker
+reranker:
+  model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  top_k: 15                     # Max docs after reranking
+
+# LLM generation
+generation:
+  model: "claude-haiku-4-5-20251001"
+  max_tokens: 8192
+  temperature: 0.2
+  max_retries: 3
+  retry_delay_seconds: 2
+
+# Output paths
+output:
+  generated_rtl_dir: "outputs/generated_rtl"
+  retrieved_context_dir: "outputs/retrieved_context"
+
+# API server
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"

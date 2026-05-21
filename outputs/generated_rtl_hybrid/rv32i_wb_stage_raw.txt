@@ -1,0 +1,29 @@
+```systemverilog
+module rv32i_wb_stage (
+    input  logic [31:0] alu_result,
+    input  logic [31:0] mem_rdata,
+    input  logic [31:0] pc_plus4_in,
+    input  logic [31:0] imm_u_in,
+    input  logic [1:0]  wb_sel,
+    output logic [31:0] wb_data
+);
+
+    // Writeback selection encoding
+    localparam logic [1:0] WB_ALU_RESULT = 2'b00;
+    localparam logic [1:0] WB_MEM_RDATA  = 2'b01;
+    localparam logic [1:0] WB_PC_PLUS4   = 2'b10;
+    localparam logic [1:0] WB_IMM_U      = 2'b11;
+
+    always_comb begin
+        wb_data = alu_result;  // Default to ALU result
+        
+        unique case (wb_sel)
+            WB_ALU_RESULT: wb_data = alu_result;
+            WB_MEM_RDATA:  wb_data = mem_rdata;
+            WB_PC_PLUS4:   wb_data = pc_plus4_in;
+            WB_IMM_U:      wb_data = imm_u_in;
+        endcase
+    end
+
+endmodule
+```

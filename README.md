@@ -261,4 +261,6 @@ rag-rv32i-rtl-gen/
 
 ## License
 
-MIT
+The project code (`app/`, `scripts/`, `configs/`, `main.py`) is licensed under the [MIT License](LICENSE).
+
+The Ibex RISC-V reference RTL used as retrieval context is Copyright (c) lowRISC contributors, licensed under [Apache 2.0](https://github.com/lowRISC/ibex/blob/master/LICENSE). See [NOTICE](NOTICE) for full attribution.

@@ -8,8 +8,8 @@ from retrieve import retrieve_structured
 import anthropic
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-OUTPUT_DIR = Path("outputs/generated_rtl_1")
-CTX_DIR = Path("outputs/retrieved_context_1")
+OUTPUT_DIR = Path("outputs/generated_rtl_2")
+CTX_DIR = Path("outputs/retrieved_context_2")
 
 # ─────────────────────────────────────────────
 # Context priority order for prompt assembly
